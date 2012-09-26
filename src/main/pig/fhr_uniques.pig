@@ -47,7 +47,7 @@ daily_counts = FOREACH grouped_daily GENERATE FLATTEN(group) AS (product,product
                                               COUNT(daily_data) AS count:long;
 STORE daily_counts INTO 'fhr-daily-counts';
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
-/* STORE daily_counts INTO '{fhr_daily_counts(ping_time date, product varchar(32), product_version varchar(8), product_channel varchar(16), os varchar(16), os_version varchar(32), locale varchar(8), new_ping int, profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('cm-metricsdb01,cm-metricsdb02', 'metrics', '5433', 'dbadmin', 'm3tr1c5'); */
+/* STORE daily_counts INTO '{fhr_daily_counts(ping_time date, product varchar(32), product_version varchar(8), product_channel varchar(16), os varchar(16), os_version varchar(32), locale varchar(8), new_ping int, profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('localhost', 'metrics', '5433', 'user', 'pass'); */
 
 /* Week in Year */
 weekly_data = FILTER data BY week_in_year == $week AND year == $year;
