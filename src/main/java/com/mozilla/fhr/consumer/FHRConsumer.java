@@ -23,9 +23,8 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 
 import kafka.consumer.KafkaStream;
@@ -50,7 +49,6 @@ import com.mozilla.bagheera.BagheeraProto.BagheeraMessage;
 import com.mozilla.bagheera.BagheeraProto.BagheeraMessage.Operation;
 import com.mozilla.bagheera.cli.OptionFactory;
 import com.mozilla.bagheera.consumer.KafkaConsumer;
-import com.mozilla.bagheera.consumer.KafkaHBaseConsumer;
 import com.mozilla.bagheera.metrics.MetricsManager;
 import com.mozilla.bagheera.sink.HBaseSink;
 import com.mozilla.bagheera.sink.KeyValueSink;
@@ -80,17 +78,25 @@ public class FHRConsumer extends KafkaConsumer {
     }
     
     @Override
-    public void poll() throws InterruptedException,ExecutionException {
-        List<Future<?>> futures = new ArrayList<Future<?>>(streams.size());
+    public void close() {
+        super.close();
+        if (geoIpLookupService != null) {
+            geoIpLookupService.close();
+        }
+    }
+    
+    @Override
+    public void poll() {
+        final CountDownLatch latch = new CountDownLatch(streams.size());
+        workers = new ArrayList<Future<?>>(streams.size());
         for (final KafkaStream<Message> stream : streams) {  
-            futures.add(executor.submit((new Runnable() {
+            workers.add(executor.submit(new Runnable() {
                 @Override
-                public void run() {
-                    
+                public void run() {                  
                     try {
                         for (MessageAndMetadata<Message> mam : stream) {
                             BagheeraMessage bmsg = BagheeraMessage.parseFrom(ByteString.copyFrom(mam.message().payload()));
-                            if (bmsg.hasOperation() && bmsg.getOperation() == Operation.CREATE_UPDATE && 
+                            if (bmsg.getOperation() == Operation.CREATE_UPDATE && 
                                 bmsg.hasId() && bmsg.hasPayload()) {
                                 ObjectNode document = jsonMapper.readValue(bmsg.getPayload().toStringUtf8(), ObjectNode.class);
                                 if (bmsg.hasIpAddr()) {
@@ -104,8 +110,8 @@ public class FHRConsumer extends KafkaConsumer {
                                 } else {
                                     sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document));
                                 }
-                            } else if (bmsg.hasOperation() && bmsg.getOperation() == Operation.DELETE && 
-                                       bmsg.hasId()) {
+                            } else if (bmsg.getOperation() == Operation.DELETE &&
+                                bmsg.hasId()) {
                                 sink.delete(bmsg.getId());
                             }
                             consumed.mark();
@@ -116,25 +122,25 @@ public class FHRConsumer extends KafkaConsumer {
                         LOG.error("Message ID was not in UTF-8 encoding", e);
                     } catch (IOException e) {
                         LOG.error("IO error while storing to data sink", e);
+                    } finally {
+                        latch.countDown();
                     }
                 }
-            })));
+            }));
         }
 
         // Wait for all tasks to complete which in the normal case they will
         // run indefinitely unless killed
-        for (Future<?> f : futures) {
-            f.get();
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            LOG.info("Interrupted during polling", e);
         }
     }
     
     public static void main(String[] args) {
         OptionFactory optFactory = OptionFactory.getInstance();
-        Options options = new Options();
-        options.addOption(optFactory.create("t", "topic", true, "Topic to poll.").required());
-        options.addOption(optFactory.create("gid", "groupid", true, "Kafka group ID.").required());
-        options.addOption(optFactory.create("p", "properties", true, "Kafka consumer properties file.").required());
-
+        Options options = KafkaConsumer.getOptions();
         options.addOption(optFactory.create("tbl", "table", true, "HBase table name.").required());
         options.addOption(optFactory.create("f", "family", true, "Column family."));
         options.addOption(optFactory.create("q", "qualifier", true, "Column qualifier."));
@@ -167,11 +173,7 @@ public class FHRConsumer extends KafkaConsumer {
         } catch (ParseException e) {
             LOG.error("Error parsing command line options", e);
             HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp(KafkaHBaseConsumer.class.getName(), options);
-        } catch (InterruptedException e) {
-            LOG.error("Interrupted while polling", e);
-        } catch (ExecutionException e) {
-            LOG.error("ExecutionException while polling", e);
+            formatter.printHelp(FHRConsumer.class.getName(), options);
         }
     }
 }
