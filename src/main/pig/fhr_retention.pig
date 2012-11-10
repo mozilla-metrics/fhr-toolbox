@@ -1,6 +1,11 @@
-register 'akela-0.4-SNAPSHOT.jar'
+register 'akela-0.5-SNAPSHOT.jar'
 register 'fhr-toolbox-0.1-SNAPSHOT.jar'
 register 'datafu-0.0.4.jar'
+register 'vertica-jdk5-6.0.0-0.jar'
+register 'pig-vertica.jar'
+register 'jackson-core-2.0.6.jar'
+register 'jackson-databind-2.0.6.jar'
+register 'jackson-annotations-2.0.6.jar'
 
 SET pig.logfile fhr_retention.log;
 /* SET default_parallel 8; */
@@ -10,14 +15,16 @@ SET pig.tmpfilecompression.codec lzo;
 /* %declare TIME_FORMAT 'yyyy-MM-dd'; */
 define IsMap com.mozilla.pig.filter.map.IsMap();
 define ProfileAgeTime com.mozilla.fhr.pig.eval.ProfileAgeTime('yyyy-MM-dd');
-define FirstPingTime com.mozilla.fhr.pig.eval.FirstPingTime();
-define DaysAgo com.mozilla.pig.eval.date.DaysAgo('yyyy-MM-dd');
+define FirstPingTime com.mozilla.fhr.pig.eval.FirstPingTime('yyyy-MM-dd');
+define DaysAgo com.mozilla.pig.eval.date.TimeDelta('5', 'yyyy-MM-dd');
 define WeekInYear com.mozilla.pig.eval.date.FormatDate('w');
 define Year com.mozilla.pig.eval.date.FormatDate('yyyy');
 define OsVersionNormalizer com.mozilla.pig.eval.regex.FindOrReturn('^[0-9]+(\\.*[0-9]*){1}');
 define WeekDelta com.mozilla.pig.eval.date.TimeDelta('3');
 define PingTimes com.mozilla.fhr.pig.eval.PingTimes();
 define DistinctByKeyAndWeekDelta datafu.pig.bags.DistinctBy('0','9');
+define LatestPingTime com.mozilla.fhr.pig.eval.LatestPingTime('yyyy-MM-dd', '$date');
+define FormatDate com.mozilla.pig.eval.date.FormatDate('yyyy-MM-dd');
 
 /* define Quantile datafu.pig.stats.StreamingQuantile('0.0','0.25','0.5','0.75','1.0'); */
 
@@ -36,7 +43,7 @@ grpd_by_all = GROUP filtered_genmap ALL;
 n = FOREACH grpd_by_all GENERATE COUNT(filtered_genmap);
 
 data = FOREACH filtered_genmap GENERATE k,
-                                        ProfileAgeTime(json_map#'thisPingTime', json_map#'appProfileAge') AS profile_age_time:long,
+                                        ProfileAgeTime(FormatDate(LatestPingTime(json_map#'dataPoints')), json_map#'appProfileAge') AS profile_age_time:long,
                                         FirstPingTime(json_map#'dataPoints') AS first_ping_time:long, 
                                         PingTimes(json_map#'dataPoints') AS ping_times;
                                         

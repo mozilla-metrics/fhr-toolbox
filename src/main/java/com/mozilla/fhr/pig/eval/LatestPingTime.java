@@ -19,82 +19,57 @@
  */
 package com.mozilla.fhr.pig.eval;
 
-import static java.util.Calendar.DATE;
-
 import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.pig.EvalFunc;
 import org.apache.pig.data.Tuple;
-import org.apache.pig.data.TupleFactory;
 
-import com.mozilla.util.DateUtil;
 
-public class UsageFrequency extends EvalFunc<Tuple> {
+/**
+ * Gets the latest ping time from data points that is less than or equal to the perspective date.
+ */
+public class LatestPingTime extends EvalFunc<Long> {
 
     public static enum ERRORS { ParseError };
     
-    private static final TupleFactory tupleFactory = TupleFactory.getInstance();
     private final SimpleDateFormat sdf;
     private long perspectiveTime;
     
-    public UsageFrequency(String dateFormat, String perspectiveDate) {
-        sdf = new SimpleDateFormat(dateFormat);
+    public LatestPingTime(String dateFormat, String perspectiveDate) {
+        sdf = new SimpleDateFormat("yyyy-MM-dd");
         try {
             Date d = sdf.parse(perspectiveDate);
             perspectiveTime = d.getTime();
         } catch (ParseException e) {
             throw new IllegalArgumentException("Invalid perspective date", e);
-        }
+        }        
     }
     
     @SuppressWarnings("unchecked")
     @Override
-    public Tuple exec(Tuple input) throws IOException {
+    public Long exec(Tuple input) throws IOException {
         if (input == null || input.size() == 0) {
             return null;
         }
-        
-        Tuple output = tupleFactory.newTuple();
-        
-        List<Long> pingTimes = new ArrayList<Long>();
+         
+        Long maxPingTime = null;
         Map<String,Object> dataPoints = (Map<String,Object>)input.get(0);
         for (String dayStr : dataPoints.keySet()) {
-            Date pingTime;
             try {
-                pingTime = sdf.parse(dayStr);
-                if (pingTime.getTime() <= perspectiveTime) {
-                    pingTimes.add(pingTime.getTime());
+                Date pingTime = sdf.parse(dayStr);
+                if (maxPingTime == null || (pingTime.getTime() <= perspectiveTime && pingTime.getTime() > maxPingTime)) {
+                    maxPingTime = pingTime.getTime();
                 }
             } catch (ParseException e) {
-                pigLogger.warn(this, "Error parsing pingTime", ERRORS.ParseError);
+                pigLogger.warn(this, "Parse error parsing pingTime", ERRORS.ParseError);
             }
         }
         
-        // Calculate the daily difference from ping time to ping time (only 7 most recent pings)
-        Collections.sort(pingTimes);
-        int start = pingTimes.size() > 7 ? pingTimes.size() - 8: 0;
-        for (int i=start; i < (pingTimes.size()-1); i++) {
-            long t1 = pingTimes.get(i);
-            long t2 = pingTimes.get(i+1);
-            long delta = DateUtil.getTimeDelta(t1, t2, DATE);
-            output.append(delta);
-        }
-        if (pingTimes.size() > 0) {
-            long t1 = pingTimes.get(pingTimes.size()-1);
-            if (t1 != perspectiveTime) {
-                long delta = DateUtil.getTimeDelta(t1, perspectiveTime, DATE);
-                output.append(delta);
-            }
-        }
-        
-        return output;
+        return maxPingTime;
     }
-
+    
 }

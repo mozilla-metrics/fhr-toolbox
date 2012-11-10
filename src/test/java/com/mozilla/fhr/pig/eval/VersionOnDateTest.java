@@ -19,46 +19,38 @@
  */
 package com.mozilla.fhr.pig.eval;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
+import org.apache.pig.data.BagFactory;
+import org.apache.pig.data.DataBag;
 import org.apache.pig.data.Tuple;
 import org.apache.pig.data.TupleFactory;
 import org.junit.Test;
 
-public class UsageFrequencyTest {
+public class VersionOnDateTest {
 
     private TupleFactory tupleFactory = TupleFactory.getInstance();
+    private BagFactory bagFactory = BagFactory.getInstance();
     
     @Test
     public void testExec1() throws IOException {
-        UsageFrequency uf = new UsageFrequency("yyyy-MM-dd","2012-07-11");
         Tuple input = tupleFactory.newTuple();
-        Map<String,Object> dataPoints = new HashMap<String,Object>();
-        dataPoints.put("2012-07-01", "blahblah");
-        dataPoints.put("2012-07-02", "blahblah");
-        dataPoints.put("2012-07-03", "blahblah");
-        dataPoints.put("2012-07-04", "blahblah");
-        dataPoints.put("2012-07-05", "blahblah");
-        dataPoints.put("2012-07-06", "blahblah");
-        dataPoints.put("2012-07-07", "blahblah");
-        dataPoints.put("2012-07-08", "blahblah");
-        dataPoints.put("2012-07-09", "blahblah");
-        input.append(dataPoints);
+        DataBag versions = bagFactory.newDefaultBag();
+        Tuple v1 = tupleFactory.newTuple(2);
+        v1.set(0,"2012-08-01");
+        v1.set(1,"14.0");
+        versions.add(v1);
+        Tuple v2 = tupleFactory.newTuple(2);
+        v2.set(0,"2012-09-15");
+        v2.set(1,"15.0");
+        versions.add(v2);
+        input.append(versions);
         
-        Tuple output = uf.exec(input);
-        assertEquals(8, output.size());
-        for (int i=0; i < output.size(); i++) {
-            long delta = ((Number)output.get(i)).longValue();
-            if ((i+1) < output.size()) {
-                assertEquals(1L, delta);
-            } else {
-                assertEquals(2L, delta);
-            }
-        }
+        VersionOnDate vod = new VersionOnDate("yyyy-MM-dd", "2012-10-22");
+        String output = vod.exec(input);
+        assertTrue("15.0".equals(output));
     }
     
 }

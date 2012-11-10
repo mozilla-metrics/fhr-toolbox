@@ -312,7 +312,7 @@
 		<dependency>
 			<groupId>com.mozilla</groupId>
 			<artifactId>akela</artifactId>
-			<version>0.4-SNAPSHOT</version>
+			<version>0.5-SNAPSHOT</version>
 		</dependency>
 		
 		<!-- Bagheera -->

@@ -23,42 +23,53 @@ import java.io.IOException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.Map;
+import java.util.Iterator;
 
 import org.apache.pig.EvalFunc;
+import org.apache.pig.data.DataBag;
 import org.apache.pig.data.Tuple;
 
-public class FirstPingTime extends EvalFunc<Long> {
+public class VersionOnDate extends EvalFunc<String> {
 
     public static enum ERRORS { ParseError };
     
     private final SimpleDateFormat sdf;
+    private long perspectiveTime;
     
-    public FirstPingTime(String dateFormat) {
-        sdf = new SimpleDateFormat("yyyy-MM-dd");
+    public VersionOnDate(String dateFormat, String perspectiveDate) {
+        sdf = new SimpleDateFormat(dateFormat);
+        try {
+            Date d = sdf.parse(perspectiveDate);
+            perspectiveTime = d.getTime();
+        } catch (ParseException e) {
+            throw new IllegalArgumentException("Invalid perspective date", e);
+        }
     }
     
-    @SuppressWarnings("unchecked")
     @Override
-    public Long exec(Tuple input) throws IOException {
+    public String exec(Tuple input) throws IOException {
         if (input == null || input.size() == 0) {
             return null;
         }
-         
-        Long minPingTime = null;
-        Map<String,Object> dataPoints = (Map<String,Object>)input.get(0);
-        for (String dayStr : dataPoints.keySet()) {
-            try {
-                Date pingTime = sdf.parse(dayStr);
-                if (minPingTime == null || pingTime.getTime() < minPingTime) {
-                    minPingTime = pingTime.getTime();
+        
+        String latestVersion = null;
+        long latestTime = 0;
+        try {
+            DataBag versions = (DataBag)input.get(0);
+            Iterator<Tuple> iter = versions.iterator();
+            while (iter.hasNext()) {
+                Tuple t = iter.next();
+                Date d = sdf.parse((String)t.get(0));
+                if (d.getTime() <= perspectiveTime && d.getTime() > latestTime) {
+                    latestVersion = (String)t.get(1);
                 }
-            } catch (ParseException e) {
-                pigLogger.warn(this, "Parse error parsing pingTime", ERRORS.ParseError);
             }
+        } catch (ParseException e) {
+            pigLogger.warn(this, "Error parsing versions date", ERRORS.ParseError);
         }
         
-        return minPingTime;
+        return latestVersion;
     }
+
     
 }

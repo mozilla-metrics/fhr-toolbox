@@ -20,8 +20,11 @@
 package com.mozilla.fhr.pig.eval;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -29,13 +32,12 @@ import org.apache.pig.data.Tuple;
 import org.apache.pig.data.TupleFactory;
 import org.junit.Test;
 
-public class UsageFrequencyTest {
+public class LatestPingTimeTest {
 
     private TupleFactory tupleFactory = TupleFactory.getInstance();
     
     @Test
-    public void testExec1() throws IOException {
-        UsageFrequency uf = new UsageFrequency("yyyy-MM-dd","2012-07-11");
+    public void testExec1() throws IOException, ParseException {
         Tuple input = tupleFactory.newTuple();
         Map<String,Object> dataPoints = new HashMap<String,Object>();
         dataPoints.put("2012-07-01", "blahblah");
@@ -45,20 +47,15 @@ public class UsageFrequencyTest {
         dataPoints.put("2012-07-05", "blahblah");
         dataPoints.put("2012-07-06", "blahblah");
         dataPoints.put("2012-07-07", "blahblah");
-        dataPoints.put("2012-07-08", "blahblah");
         dataPoints.put("2012-07-09", "blahblah");
+        dataPoints.put("2012-07-08", "blahblah");
         input.append(dataPoints);
         
-        Tuple output = uf.exec(input);
-        assertEquals(8, output.size());
-        for (int i=0; i < output.size(); i++) {
-            long delta = ((Number)output.get(i)).longValue();
-            if ((i+1) < output.size()) {
-                assertEquals(1L, delta);
-            } else {
-                assertEquals(2L, delta);
-            }
-        }
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        LatestPingTime lpt = new LatestPingTime("yyyy-MM-dd", "2012-10-22");
+        Long output = lpt.exec(input);
+        assertNotNull(output);
+        assertEquals(new Long(sdf.parse("2012-07-09").getTime()), output);
     }
     
 }
