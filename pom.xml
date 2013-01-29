@@ -319,14 +319,14 @@
 		<dependency>
 		    <groupId>com.mozilla</groupId>
 		    <artifactId>bagheera</artifactId>
-		    <version>0.7-SNAPSHOT</version>
+		    <version>0.7</version>
 		</dependency>
 		
 		<!-- GeoIP -->
 		<dependency>
 			<groupId>com.maxmind</groupId>
 			<artifactId>maxmind-geoip</artifactId>
-			<version>1.2.5</version>
+			<version>1.2.8</version>
 		</dependency>
 		
 	</dependencies>
