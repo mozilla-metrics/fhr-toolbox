@@ -57,9 +57,9 @@ import com.mozilla.bagheera.BagheeraProto.BagheeraMessage.Operation;
 import com.mozilla.bagheera.cli.OptionFactory;
 import com.mozilla.bagheera.consumer.KafkaConsumer;
 import com.mozilla.bagheera.metrics.MetricsManager;
+import com.mozilla.bagheera.sink.HBaseSink;
 import com.mozilla.bagheera.sink.KeyValueSink;
 import com.mozilla.bagheera.sink.KeyValueSinkFactory;
-import com.mozilla.bagheera.sink.LoggerSink;
 import com.mozilla.bagheera.sink.SinkConfiguration;
 import com.mozilla.bagheera.util.ShutdownHook;
 
@@ -251,7 +251,7 @@ public class FHRConsumer extends KafkaConsumer {
             sinkConfig.setString("hbasesink.hbase.column.family", cmd.getOptionValue("family", "data"));
             sinkConfig.setString("hbasesink.hbase.column.qualifier", cmd.getOptionValue("qualifier", "json"));
             sinkConfig.setBoolean("hbasesink.hbase.rowkey.prefixdate", Boolean.parseBoolean(cmd.getOptionValue("prefixdate", "true")));
-            KeyValueSinkFactory sinkFactory = KeyValueSinkFactory.getInstance(LoggerSink.class, sinkConfig);
+            KeyValueSinkFactory sinkFactory = KeyValueSinkFactory.getInstance(HBaseSink.class, sinkConfig);
             sh.addLast(sinkFactory);
             consumer.setSinkFactory(sinkFactory);
             
