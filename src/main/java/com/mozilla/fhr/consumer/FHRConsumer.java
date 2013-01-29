@@ -45,9 +45,9 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
-import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.node.ObjectNode;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.maxmind.geoip.Country;
@@ -246,7 +246,9 @@ public class FHRConsumer extends KafkaConsumer {
             
             // Set the sink for consumer storage
             SinkConfiguration sinkConfig = new SinkConfiguration();
-            sinkConfig.setString("hbasesink.hbase.numthreads", cmd.getOptionValue("numthreads"));
+            if (cmd.hasOption("numthreads")) {
+                sinkConfig.setInt("hbasesink.hbase.numthreads", Integer.parseInt(cmd.getOptionValue("numthreads")));
+            }
             sinkConfig.setString("hbasesink.hbase.tablename", cmd.getOptionValue("table"));
             sinkConfig.setString("hbasesink.hbase.column.family", cmd.getOptionValue("family", "data"));
             sinkConfig.setString("hbasesink.hbase.column.qualifier", cmd.getOptionValue("qualifier", "json"));
