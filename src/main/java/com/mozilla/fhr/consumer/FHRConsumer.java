@@ -33,6 +33,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import kafka.consumer.KafkaStream;
 import kafka.message.Message;
@@ -46,11 +47,12 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
 
+import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.maxmind.geoip.Country;
+import com.maxmind.geoip.Location;
 import com.maxmind.geoip.LookupService;
 import com.mozilla.bagheera.BagheeraProto.BagheeraMessage;
 import com.mozilla.bagheera.BagheeraProto.BagheeraMessage.Operation;
@@ -62,13 +64,22 @@ import com.mozilla.bagheera.sink.KeyValueSink;
 import com.mozilla.bagheera.sink.KeyValueSinkFactory;
 import com.mozilla.bagheera.sink.SinkConfiguration;
 import com.mozilla.bagheera.util.ShutdownHook;
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Meter;
+import com.yammer.metrics.core.MetricName;
 
 public class FHRConsumer extends KafkaConsumer {
 
     private static final Logger LOG = Logger.getLogger(FHRConsumer.class);
     
+    private static final String GEO_COUNTRY_FIELD = "geoCountry";
+    private static final String UNKNOWN = "Unknown";
+    
     private ObjectMapper jsonMapper;
     private LookupService geoIpLookupService;
+    
+    protected Meter invalidJsonMeter;
+    protected Meter unknownGeoIpMeter;
     
     public FHRConsumer(String topic, Properties props) {
         this(topic, props, DEFAULT_NUM_THREADS);
@@ -84,6 +95,9 @@ public class FHRConsumer extends KafkaConsumer {
             LOG.error("Failed to load geoip database", e);
             throw new RuntimeException(e);
         }
+        
+        invalidJsonMeter = Metrics.newMeter(new MetricName("bagheera", "consumer", topic + ".json.invalid"), "messages", TimeUnit.SECONDS);
+        unknownGeoIpMeter = Metrics.newMeter(new MetricName("bagheera", "consumer", topic + ".geoip.unknown"), "messages", TimeUnit.SECONDS);
     }
     
     @Override
@@ -120,12 +134,14 @@ public class FHRConsumer extends KafkaConsumer {
         for (Future<Void> worker : workers) {
             try {
                 if (worker.isDone()) {
-                    worker.get();
+                    worker.get(1, TimeUnit.SECONDS);
                 }
             } catch (InterruptedException e) {
                 LOG.error("Thread was interrupted:", e);
             } catch (ExecutionException e) {
                 LOG.error("Exception occured in thread:", e);
+            } catch (TimeoutException e) {
+                LOG.error("Timed out waiting for thread result:", e);
             }
        }
     }
@@ -200,19 +216,32 @@ public class FHRConsumer extends KafkaConsumer {
                     KeyValueSink sink = sinkFactory.getSink(bmsg.getNamespace());
                     if (bmsg.getOperation() == Operation.CREATE_UPDATE && 
                         bmsg.hasId() && bmsg.hasPayload()) {
-                        ObjectNode document = jsonMapper.readValue(bmsg.getPayload().toStringUtf8(), ObjectNode.class);
-                        if (bmsg.hasIpAddr()) {
-                            Country country = geoIpLookupService.getCountry(InetAddress.getByAddress(bmsg.getIpAddr().toByteArray()));
-                            document.put("geoCountry", country == null || "--".equals(country.getCode()) ? "Unknown" : country.getCode());
-                        } else {
-                            document.put("geoCountry", "Unknown");
-                        }
-                        
-                        if (bmsg.hasTimestamp()) {
-                            sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document), bmsg.getTimestamp());
-                        } else {
-                            sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document));
-                        }
+                        try {
+                            ObjectNode document = jsonMapper.readValue(bmsg.getPayload().toStringUtf8(), ObjectNode.class);
+                            // do a geoip lookup on the IP if we have one
+                            if (bmsg.hasIpAddr()) {
+                                Location location = geoIpLookupService.getLocation(InetAddress.getByAddress(bmsg.getIpAddr().toByteArray()));
+                                if (location != null && !"--".equals(location.countryCode)) {
+                                    document.put(GEO_COUNTRY_FIELD, location.countryCode);
+                                } else {
+                                    unknownGeoIpMeter.mark();
+                                    document.put(GEO_COUNTRY_FIELD, UNKNOWN);
+                                }
+                            } else {
+                                unknownGeoIpMeter.mark();
+                                document.put(GEO_COUNTRY_FIELD, UNKNOWN);
+                            }
+                            
+                            // store the document
+                            if (bmsg.hasTimestamp()) {
+                                sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document), bmsg.getTimestamp());
+                            } else {
+                                sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document));
+                            }
+                        } catch (JsonParseException jpe) {
+                            invalidJsonMeter.mark();
+                            LOG.error("Invalid JSON");
+                        }                        
                     } else if (bmsg.getOperation() == Operation.DELETE &&
                         bmsg.hasId()) {
                         sink.delete(bmsg.getId());
@@ -252,7 +281,7 @@ public class FHRConsumer extends KafkaConsumer {
             sinkConfig.setString("hbasesink.hbase.tablename", cmd.getOptionValue("table"));
             sinkConfig.setString("hbasesink.hbase.column.family", cmd.getOptionValue("family", "data"));
             sinkConfig.setString("hbasesink.hbase.column.qualifier", cmd.getOptionValue("qualifier", "json"));
-            sinkConfig.setBoolean("hbasesink.hbase.rowkey.prefixdate", Boolean.parseBoolean(cmd.getOptionValue("prefixdate", "true")));
+            sinkConfig.setBoolean("hbasesink.hbase.rowkey.prefixdate", Boolean.parseBoolean(cmd.getOptionValue("prefixdate", "false")));
             KeyValueSinkFactory sinkFactory = KeyValueSinkFactory.getInstance(HBaseSink.class, sinkConfig);
             sh.addLast(sinkFactory);
             consumer.setSinkFactory(sinkFactory);
