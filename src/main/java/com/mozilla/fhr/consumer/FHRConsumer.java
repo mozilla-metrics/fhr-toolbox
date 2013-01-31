@@ -29,6 +29,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -122,7 +123,7 @@ public class FHRConsumer extends KafkaConsumer {
             while (true) {
                 latch.await(10, TimeUnit.SECONDS);
                 if (latch.getCount() != streams.size()) {
-                    LOG.error("Dead thread detected...exiting.");
+                    // we have a dead thread and should exit
                     break;
                 }
             }
@@ -133,7 +134,7 @@ public class FHRConsumer extends KafkaConsumer {
         // Spit out errors if there were any
         for (Future<Void> worker : workers) {
             try {
-                if (worker.isDone()) {
+                if (worker.isDone() && !worker.isCancelled()) {
                     worker.get(1, TimeUnit.SECONDS);
                 }
             } catch (InterruptedException e) {
@@ -142,6 +143,8 @@ public class FHRConsumer extends KafkaConsumer {
                 LOG.error("Exception occured in thread:", e);
             } catch (TimeoutException e) {
                 LOG.error("Timed out waiting for thread result:", e);
+            } catch (CancellationException e) {
+                LOG.error("Thread has been canceled: ", e);
             }
        }
     }
