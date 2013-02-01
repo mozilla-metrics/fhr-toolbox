@@ -74,7 +74,7 @@ public class FHRConsumer extends KafkaConsumer {
     private static final Logger LOG = Logger.getLogger(FHRConsumer.class);
     
     private static final String GEO_COUNTRY_FIELD = "geoCountry";
-    private static final String UNKNOWN = "Unknown";
+    private static final String UNKNOWN_COUNTRY_CODE = "--";
     
     private ObjectMapper jsonMapper;
     private LookupService geoIpLookupService;
@@ -224,15 +224,16 @@ public class FHRConsumer extends KafkaConsumer {
                             // do a geoip lookup on the IP if we have one
                             if (bmsg.hasIpAddr()) {
                                 Location location = geoIpLookupService.getLocation(InetAddress.getByAddress(bmsg.getIpAddr().toByteArray()));
-                                if (location != null && !"--".equals(location.countryCode)) {
+                                if (location != null && !UNKNOWN_COUNTRY_CODE.equals(location.countryCode) &&
+                                    location.countryCode.trim().length() > 0) {
                                     document.put(GEO_COUNTRY_FIELD, location.countryCode);
                                 } else {
                                     unknownGeoIpMeter.mark();
-                                    document.put(GEO_COUNTRY_FIELD, UNKNOWN);
+                                    document.put(GEO_COUNTRY_FIELD, UNKNOWN_COUNTRY_CODE);
                                 }
                             } else {
                                 unknownGeoIpMeter.mark();
-                                document.put(GEO_COUNTRY_FIELD, UNKNOWN);
+                                document.put(GEO_COUNTRY_FIELD, UNKNOWN_COUNTRY_CODE);
                             }
                             
                             // store the document

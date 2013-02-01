@@ -20,42 +20,34 @@
 package com.mozilla.fhr.pig.eval;
 
 import java.io.IOException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.Calendar;
-import java.util.Date;
 
 import org.apache.pig.EvalFunc;
 import org.apache.pig.data.Tuple;
 
-public class ProfileAgeTime extends EvalFunc<Long> {
+public class ProfileCreationTime extends EvalFunc<Long> {
 
     public static enum ERRORS { DateParseError };
+
+    private Calendar cal;
     
-    private SimpleDateFormat sdf;
-    
-    public ProfileAgeTime(String pingTimeFormat) {
-        sdf = new SimpleDateFormat(pingTimeFormat);
+    public ProfileCreationTime() {
+        cal = Calendar.getInstance();
     }
     
     @Override
     public Long exec(Tuple input) throws IOException {
-        if (input == null || input.size() != 2) {
+        if (input == null || input.size() == 0 || 
+            input.get(0) == null) {
             return null;
         }
-        
-        Long t = null;
-        try {
-            Date d = sdf.parse((String)input.get(0));
-            Calendar cal = Calendar.getInstance();
-            cal.setTime(d);
-            cal.add(Calendar.DATE, -((Number)input.get(1)).intValue());
-            t = cal.getTimeInMillis();
-        } catch (ParseException e) {
-            pigLogger.warn(this, "Date parse error", ERRORS.DateParseError);
-        }
+
+        // reset to epoch
+        cal.setTimeInMillis(0);
+        // profileCreation is in days since epoch
+        cal.add(Calendar.DATE, ((Number)input.get(0)).intValue());
              
-        return t;
+        return cal.getTimeInMillis();
     }
 
 }
