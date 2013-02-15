@@ -43,12 +43,14 @@ grpd_by_all = GROUP filtered_genmap ALL;
 n = FOREACH grpd_by_all GENERATE COUNT(filtered_genmap);
 
 data = FOREACH filtered_genmap GENERATE k,
-                                        ProfileAgeTime(FormatDate(LatestPingTime(json_map#'dataPoints')), json_map#'appProfileAge') AS profile_age_time:long,
+                                        ProfileAgeTime(FormatDate(LatestPingTime(json_map#'dataPoints')), ((int)json_map#'appProfileAge' - (int)DaysAgo(json_map#'thisPingTime', '$date'))) AS profile_age_time:long,
                                         FirstPingTime(json_map#'dataPoints') AS first_ping_time:long, 
                                         PingTimes(json_map#'dataPoints') AS ping_times;
                                         
 flat_data = FOREACH data GENERATE k, profile_age_time, FLATTEN(ping_times) AS ping_time:long;
-wiy_data = FOREACH flat_data GENERATE k, profile_age_time, ping_time, 
+wiy_data = FOREACH flat_data GENERATE k,
+                                      profile_age_time, 
+                                      ping_time, 
                                       (int)WeekInYear(ping_time) AS week_in_year:int, 
                                       (int)Year(ping_time) AS year:int;
 /* Constrain data to before the specified week and year (works in case you ever have to rerun from a historical perspective) */
@@ -56,9 +58,12 @@ tc_data = FILTER wiy_data BY week_in_year <= $week AND year <= $year;
 key_deltas = FOREACH tc_data GENERATE k, WeekDelta(profile_age_time, ping_time) AS week_delta:long;
 distinct_key_deltas = DISTINCT key_deltas;
 grpd_by_week_delta = GROUP distinct_key_deltas BY week_delta;
-week_delta_counts = FOREACH grpd_by_week_delta GENERATE FLATTEN(group) AS week_delta:long, COUNT(distinct_key_deltas) AS delta_count:long;
-week_delta_props = FOREACH week_delta_counts GENERATE week_delta, delta_count, ((double)delta_count/(double)n.$0);
-dump week_delta_props;
+week_delta_counts = FOREACH grpd_by_week_delta GENERATE FLATTEN(group) AS week_delta:long, 
+                                                        COUNT(distinct_key_deltas) AS delta_count:long;
+week_delta_props = FOREACH week_delta_counts GENERATE '$date' AS perspective_date:chararray,
+                                                       week_delta, delta_count, 
+                                                       ((double)delta_count/(double)n.$0);
+STORE week_delta_props INTO 'fhr-retention-weekly-unique-$date';
 
 /* Group by key and only keep the most recent week (i.e. lowest week delta) */
 grpd_by_k = GROUP distinct_key_deltas BY k;
@@ -66,8 +71,11 @@ min_deltas = FOREACH grpd_by_k GENERATE FLATTEN(group) AS k:bytearray, MIN(disti
 grpd_by_week_delta2 = GROUP min_deltas BY week_delta;
 week_delta_counts2 = FOREACH grpd_by_week_delta2 GENERATE FLATTEN(group) AS week_delta:long,
                                                           COUNT(min_deltas) AS delta_count:long;
-week_delta_probs = FOREACH week_delta_counts2 GENERATE week_delta, delta_count, ((double)delta_count/(double)n.$0);
-dump week_delta_probs;
+week_delta_probs = FOREACH week_delta_counts2 GENERATE '$date' AS perspective_date:chararray,
+                                                       week_delta, 
+                                                       delta_count, 
+                                                       ((double)delta_count/(double)n.$0);
+STORE week_delta_probs INTO 'fhr-retention-alltime-unique-$date';
 
 /* Week in Year */
 

@@ -30,9 +30,18 @@ import org.apache.pig.data.TupleFactory;
 
 public class CrashTuples extends EvalFunc<DataBag> {
 
+    private static final String CRASHES_FIELD = "org.mozilla.crashes.crashes";
+    private static final String PENDING_FIELD = "pending";
+    private static final String SUBMITTED_FIELD = "submitted";
+    
+    private static final String ADDON_COUNTS_FIELD = "org.mozilla.addons.counts";
+    private static final String EXTENSION_FIELD = "extension";
+    private static final String PLUGIN_FIELD = "plugin";
+    private static final String THEME_FIELD = "theme";
+    
     private static BagFactory bagFactory = BagFactory.getInstance();
     private static TupleFactory tupleFactory = TupleFactory.getInstance();
-
+    
     private int getSafeInt(Object o) {
         if (o == null) {
             return 0;
@@ -50,44 +59,36 @@ public class CrashTuples extends EvalFunc<DataBag> {
         
         DataBag dbag = bagFactory.newDefaultBag();
         Map<String,Object> dataPoints = (Map<String,Object>)input.get(0);
-        for (Map.Entry<String, Object> dataPoint : dataPoints.entrySet()) {
-            String dayStr = dataPoint.getKey();
-            Map<String,Object> fields = (Map<String,Object>)dataPoint.getValue();
-            if ((fields.containsKey("crashCountPending") || fields.containsKey("crashCountSubmitted")) && fields.containsKey("sessions")) {
+        for (Map.Entry<String,Object> dayEntry : dataPoints.entrySet()) {
+            Map<String,Object> dayMap = (Map<String,Object>)dayEntry.getValue();
+            if (dayMap.containsKey(CRASHES_FIELD)) { 
                 // crash info
-                int crashCountPending = getSafeInt(fields.get("crashCountPending"));
-                int crashCountSubmitted = getSafeInt(fields.get("crashCountSubmitted"));
+                Map<String,Object> crashesMap = (Map<String,Object>)dayMap.get(CRASHES_FIELD);
+                int crashCountPending = getSafeInt(crashesMap.get(PENDING_FIELD));
+                int crashCountSubmitted = getSafeInt(crashesMap.get(SUBMITTED_FIELD));
                 
-                // aborted session info
-                Map<String,Object> sessions = (Map<String,Object>)fields.get("sessions");
-                int aborted = getSafeInt(sessions.get("aborted"));
-                int abortedTime = getSafeInt(sessions.get("abortedTime"));
-                int abortedActiveTime = getSafeInt(sessions.get("abortedActiveTime"));
+                // TODO: aborted session info...where did this move to in the payload? Do we need it here anyway?
                 
                 // addons info
-                Map<String,Object> addonCounts = (Map<String,Object>)fields.get("addonCounts");
-                int themeCount = 0, extCount = 0, pluginCount = 0;
-                if (addonCounts != null) {
-                    themeCount = getSafeInt(addonCounts.get("theme"));
-                    extCount = getSafeInt(addonCounts.get("extension"));
-                    pluginCount = getSafeInt(addonCounts.get("plugin"));
+                Map<String,Object> addonCountMap = (Map<String,Object>)dayMap.get(ADDON_COUNTS_FIELD);
+                int themeCount = -1, extensionCount = -1, pluginCount = -1;
+                if (addonCountMap != null) {
+                    themeCount = getSafeInt(addonCountMap.get(THEME_FIELD));
+                    extensionCount = getSafeInt(addonCountMap.get(EXTENSION_FIELD));
+                    pluginCount = getSafeInt(addonCountMap.get(PLUGIN_FIELD));
                 }
                 
-                Tuple t = tupleFactory.newTuple(9);
-                t.set(0, dayStr);
+                Tuple t = tupleFactory.newTuple(6);
+                t.set(0, dayEntry.getKey());
                 t.set(1, crashCountPending);
                 t.set(2, crashCountSubmitted);          
-                t.set(3, aborted);
-                t.set(4, abortedTime);
-                t.set(5, abortedActiveTime);
-                t.set(6, themeCount);
-                t.set(7, extCount);
-                t.set(8, pluginCount);
+                t.set(3, themeCount);
+                t.set(4, extensionCount);
+                t.set(5, pluginCount);
                 
                 dbag.add(t);
             }
         }
-
         
         return dbag;
     }

@@ -70,7 +70,7 @@ daily_counts = FOREACH grouped_daily GENERATE '$date' AS perspective_date:charar
                                               FLATTEN(group) AS (product,product_version,product_channel,os,os_version,geo_country_code,new_ping), 
                                               FLATTEN(Median(daily_data.bucketed_profile_age)) AS median_profile_age:float,
                                               COUNT(daily_data) AS count:long;
-STORE daily_counts INTO 'fhr-daily-counts-$date';
+/*STORE daily_counts INTO 'fhr-daily-counts-$date';*/
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
 STORE daily_counts INTO '{fhr_daily_counts(perspective_date date, product varchar(32), product_version varchar(8), product_channel varchar(64), os varchar(16), os_version varchar(32), geo_country_code varchar(4), new_ping int, median_profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('$dblist', '$dbname', '$dbport', '$dbuser', '$dbpass');
 
@@ -83,7 +83,7 @@ wiy_counts = FOREACH grouped_wiy GENERATE '$date' AS perspective_date:chararray,
                                           FLATTEN(group) AS (product,product_version,product_channel,os,os_version,geo_country_code,new_ping), 
                                           FLATTEN(Median(weekly_data.bucketed_profile_age)) AS median_profile_age,
                                           COUNT(weekly_data) AS count:long;
-STORE wiy_counts INTO 'fhr-wiy-counts-$date';
+/*STORE wiy_counts INTO 'fhr-wiy-counts-$date';*/
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
 STORE wiy_counts INTO '{fhr_wiy_counts(perspective_date date, product varchar(32), product_version varchar(8), product_channel varchar(64), os varchar(16), os_version varchar(32), geo_country_code varchar(4), new_ping int, median_profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('$dblist', '$dbname', '$dbport', '$dbuser', '$dbpass');
                    
@@ -94,7 +94,7 @@ miy_counts = FOREACH grouped_miy GENERATE '$date' AS perspective_date:chararray,
                                           FLATTEN(group) AS (product,product_version,product_channel,os,os_version,geo_country_code,new_ping), 
                                           FLATTEN(Median(monthly_data.bucketed_profile_age)) AS median_profile_age,
                                           COUNT(monthly_data) AS count:long;
-STORE miy_counts INTO 'fhr-miy-counts-$date';
+/*STORE miy_counts INTO 'fhr-miy-counts-$date';*/
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
 STORE miy_counts INTO '{fhr_miy_counts(perspective_date date, product varchar(32), product_version varchar(8), product_channel varchar(64), os varchar(16), os_version varchar(32), geo_country_code varchar(4), new_ping int, median_profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('$dblist', '$dbname', '$dbport', '$dbuser', '$dbpass');
                    
@@ -105,7 +105,7 @@ d7_counts = FOREACH grouped_d7 GENERATE '$date' AS perspective_date:chararray,
                                         FLATTEN(group) AS (product,product_version,product_channel,os,os_version,geo_country_code,new_ping),  
                                         FLATTEN(Median(d7_data.bucketed_profile_age)) AS median_profile_age,
                                         COUNT(d7_data) AS count:long;
-STORE d7_counts INTO 'fhr-d7-counts-$date';
+/*STORE d7_counts INTO 'fhr-d7-counts-$date';*/
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
 STORE d7_counts INTO '{fhr_d7_counts(perspective_date date, product varchar(32), product_version varchar(8), product_channel varchar(64), os varchar(16), os_version varchar(32), geo_country_code varchar(4), new_ping int, median_profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('$dblist', '$dbname', '$dbport', '$dbuser', '$dbpass');
                    
@@ -116,6 +116,6 @@ d30_counts = FOREACH grouped_d30 GENERATE '$date' AS perspective_date:chararray,
                                           FLATTEN(group) AS (product,product_version,product_channel,os,os_version,geo_country_code,new_ping), 
                                           FLATTEN(Median(d30_data.bucketed_profile_age)) AS median_profile_age,
                                           COUNT(d30_data) AS count:long;
-STORE d30_counts INTO 'fhr-d30-counts-$date';
+/*STORE d30_counts INTO 'fhr-d30-counts-$date';*/
 /* Store into Vertica (only will work on Vertica 5+ and the vertica connector jar needs to be on every machine)*/
 STORE d30_counts INTO '{fhr_d30_counts(perspective_date date, product varchar(32), product_version varchar(8), product_channel varchar(64), os varchar(16), os_version varchar(32), geo_country_code varchar(4), new_ping int, median_profile_age float, count int)}' USING com.vertica.pig.VerticaStorer('$dblist', '$dbname', '$dbport', '$dbuser', '$dbpass');
