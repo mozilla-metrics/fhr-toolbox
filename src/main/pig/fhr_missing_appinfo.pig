@@ -17,5 +17,5 @@ raw = LOAD 'hbase://metrics' USING org.apache.pig.backend.hadoop.hbase.HBaseStor
                                    (k:bytearray,json:chararray);
 genmap = FOREACH raw GENERATE k, com.mozilla.pig.eval.json.JsonMap(json) AS json_map:map[];
 filtered_genmap = FILTER genmap BY IsMap(json_map#'data'#'last');
-data = FOREACH filtered_genmap GENERATE k, Size(json_map#'data'#'last'#'org.mozilla.appInfo.appinfo') AS appinfo_size:long;
+data = FOREACH filtered_genmap GENERATE json_map#'thisPingDate' AS submission_date:chararray, k, Size(json_map#'data'#'last'#'org.mozilla.appInfo.appinfo') AS appinfo_size:long;
 STORE data INTO 'fhr_missing_appinfo_out';
