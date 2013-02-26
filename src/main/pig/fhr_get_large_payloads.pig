@@ -13,4 +13,6 @@ raw = LOAD 'hbase://metrics' USING org.apache.pig.backend.hadoop.hbase.HBaseStor
                                    (k:bytearray,json:chararray);
 long_payloads = FILTER raw BY SIZE(json) > 1000000;
 
-STORE long_payloads INTO 'fhr_long_payloads_out';
+some_long_payloads = limit long_payloads 10;
+
+STORE some_long_payloads INTO 'fhr_long_payloads_out';
