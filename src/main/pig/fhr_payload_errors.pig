@@ -16,6 +16,6 @@ raw = LOAD 'hbase://metrics' USING org.apache.pig.backend.hadoop.hbase.HBaseStor
                                    (k:bytearray,json:chararray);
 genmap = FOREACH raw GENERATE k, com.mozilla.pig.eval.json.JsonMap(json) AS json_map:map[];
 filtered_genmap = FILTER genmap BY json_map#'errors' IS NOT NULL;
-data = FOREACH filtered_genmap GENERATE json_map#'thisPingDate' AS submission_date:chararray, json_map#'errors' AS errs:chararray;
+data = FOREACH filtered_genmap GENERATE json_map#'thisPingDate' AS submission_date:chararray, json_map#'data'#'last'#'org.mozilla.appInfo.appinfo'#'appBuildID' as build_id:chararray, json_map#'errors' AS errs:chararray;
 
 STORE data INTO 'fhr_payload_errors_out';
