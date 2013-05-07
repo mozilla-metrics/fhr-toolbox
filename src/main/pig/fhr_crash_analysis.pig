@@ -1,5 +1,5 @@
 register 'akela-0.5-SNAPSHOT.jar'
-register 'fhr-toolbox-0.1-SNAPSHOT.jar'
+register 'fhr-toolbox-0.3-SNAPSHOT.jar'
 register 'datafu-0.0.4.jar'
 register 'vertica-jdk5-6.0.0-0.jar'
 register 'pig-vertica.jar'
@@ -40,8 +40,10 @@ data = FOREACH prefltrd GENERATE k,
                                  OsVersionNormalizer((chararray)json_map#'data'#'last'#'org.mozilla.sysinfo.sysinfo'#'version') AS os_version:chararray,
                                  json_map#'geoCountry' AS geo_country_code:chararray,
                                  FLATTEN(CrashTuples(json_map#'data'#'days')) AS 
-                                    (date:chararray, crash_count_pending:int, crash_count_submitted:int,
-                                     theme_count:int, ext_count:int, plugin_count:int);
+                                    (date:chararray, product_crash_version:chararray, crash_count_pending:int, crash_count_submitted:int,
+                                     theme_count:int, ext_count:int, plugin_count:int,
+                                     aborted_count:int );
+
 fltrd = FILTER data BY (crash_count_pending > 0 OR crash_count_submitted > 0) AND
                        product IS NOT NULL AND 
                        (product == 'Firefox' OR product == 'MetroFirefox' OR 
@@ -50,6 +52,7 @@ fltrd = FILTER data BY (crash_count_pending > 0 OR crash_count_submitted > 0) AN
                        product_channel IS NOT NULL AND
                        os IS NOT NULL AND
                        os_version IS NOT NULL;
+                       
 bucketed_data = FOREACH fltrd GENERATE k, product,product_version,product_channel,os,os_version,geo_country_code,date,
                                       DateDelta(date, '$date') AS days_ago:long,
                                       WeekInYear(date) AS week_in_year:chararray,
