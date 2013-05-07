@@ -41,7 +41,7 @@ public class CrashTuples extends EvalFunc<DataBag> {
 
     private static final String APPSESSIONS_FIELD = "org.mozilla.appSessions.previous";
     private static final String ABORTED_TOTALTIME_FIELD = "abortedTotalTime";
-    	
+        
 
     private static BagFactory bagFactory = BagFactory.getInstance();
     private static TupleFactory tupleFactory = TupleFactory.getInstance();
@@ -69,23 +69,23 @@ public class CrashTuples extends EvalFunc<DataBag> {
             Map<String,Object> dayMap = (Map<String,Object>)dayEntry.getValue();
 
             if ((dayMap.containsKey(CRASHES_FIELD) || dayMap.containsKey(ADDON_COUNTS_FIELD)) || dayMap.containsKey(APPSESSIONS_FIELD)) {
-            	
+                
                 // crash info
                 Map<String,Object> crashesMap = (Map<String,Object>)dayMap.get(CRASHES_FIELD);
                 int crashCountPending = 0, crashCountSubmitted = 0;
-				if (crashesMap != null) {
-					crashCountPending = getSafeInt(crashesMap.get(CRASHES_PENDING_FIELD));
-					crashCountSubmitted = getSafeInt(crashesMap.get(CRASHES_SUBMITTED_FIELD));
-				}
+                if (crashesMap != null) {
+                    crashCountPending = getSafeInt(crashesMap.get(CRASHES_PENDING_FIELD));
+                    crashCountSubmitted = getSafeInt(crashesMap.get(CRASHES_SUBMITTED_FIELD));
+                }
                 
-				// aborted sessions info
+                // aborted sessions info
                 Map<String,Object> sessionsMap = (Map<String,Object>)dayMap.get(APPSESSIONS_FIELD);
                 int abortedSessionsCount = 0;
-				if (sessionsMap != null) {
-					DataBag abortedSessionTimesBag = (DataBag) sessionsMap.get(ABORTED_TOTALTIME_FIELD);
-					if (abortedSessionTimesBag != null)
-						abortedSessionsCount = (int) abortedSessionTimesBag.size();
-				}
+                if (sessionsMap != null) {
+                    DataBag abortedSessionTimesBag = (DataBag) sessionsMap.get(ABORTED_TOTALTIME_FIELD);
+                    if (abortedSessionTimesBag != null)
+                        abortedSessionsCount = (int) abortedSessionTimesBag.size();
+                }
 
                 // addons info
                 Map<String,Object> addonCountMap = (Map<String,Object>)dayMap.get(ADDON_COUNTS_FIELD);
