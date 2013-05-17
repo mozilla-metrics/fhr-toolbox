@@ -60,14 +60,15 @@ import com.mozilla.bagheera.BagheeraProto.BagheeraMessage.Operation;
 import com.mozilla.bagheera.cli.OptionFactory;
 import com.mozilla.bagheera.consumer.KafkaConsumer;
 import com.mozilla.bagheera.metrics.MetricsManager;
-import com.mozilla.bagheera.sink.HBaseSink;
 import com.mozilla.bagheera.sink.KeyValueSink;
 import com.mozilla.bagheera.sink.KeyValueSinkFactory;
 import com.mozilla.bagheera.sink.SinkConfiguration;
 import com.mozilla.bagheera.util.ShutdownHook;
+import com.mozilla.fhr.sink.HBaseSink;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricName;
+import com.mozilla.bagheera.metrics.MetricsManager;
 
 public class FHRConsumer extends KafkaConsumer {
 
@@ -291,7 +292,7 @@ public class FHRConsumer extends KafkaConsumer {
             consumer.setSinkFactory(sinkFactory);
             
             // Initialize metrics collection, reporting, etc.
-            MetricsManager.getInstance();
+            final MetricsManager manager = MetricsManager.getDefaultMetricsManager();
             
             // Begin polling
             consumer.poll();
