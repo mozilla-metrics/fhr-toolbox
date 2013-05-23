@@ -49,6 +49,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
@@ -68,21 +69,20 @@ import com.mozilla.fhr.sink.HBaseSink;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricName;
-import com.mozilla.bagheera.metrics.MetricsManager;
 
 public class FHRConsumer extends KafkaConsumer {
 
     private static final Logger LOG = Logger.getLogger(FHRConsumer.class);
-    
+
     private static final String GEO_COUNTRY_FIELD = "geoCountry";
     private static final String UNKNOWN_COUNTRY_CODE = "--";
-    
+
     private ObjectMapper jsonMapper;
     private LookupService geoIpLookupService;
-    
+
     protected Meter invalidJsonMeter;
     protected Meter unknownGeoIpMeter;
-    
+
     public FHRConsumer(String topic, Properties props) {
         this(topic, props, DEFAULT_NUM_THREADS);
     }
@@ -97,11 +97,11 @@ public class FHRConsumer extends KafkaConsumer {
             LOG.error("Failed to load geoip database", e);
             throw new RuntimeException(e);
         }
-        
+
         invalidJsonMeter = Metrics.newMeter(new MetricName("bagheera", "consumer", topic + ".json.invalid"), "messages", TimeUnit.SECONDS);
         unknownGeoIpMeter = Metrics.newMeter(new MetricName("bagheera", "consumer", topic + ".geoip.unknown"), "messages", TimeUnit.SECONDS);
     }
-    
+
     @Override
     public void close() {
         super.close();
@@ -109,12 +109,12 @@ public class FHRConsumer extends KafkaConsumer {
             geoIpLookupService.close();
         }
     }
-    
+
     @Override
     public void poll() {
         final CountDownLatch latch = new CountDownLatch(streams.size());
         workers = new ArrayList<Future<Void>>(streams.size());
-        for (final KafkaStream<Message> stream : streams) {  
+        for (final KafkaStream<Message> stream : streams) {
             workers.add(executor.submit(new FHRConsumerWorker(stream, latch)));
         }
 
@@ -131,7 +131,7 @@ public class FHRConsumer extends KafkaConsumer {
         } catch (InterruptedException e) {
             LOG.info("Interrupted during polling", e);
         }
-        
+
         // Spit out errors if there were any
         for (Future<Void> worker : workers) {
             try {
@@ -149,7 +149,7 @@ public class FHRConsumer extends KafkaConsumer {
             }
        }
     }
-    
+
     /**
      * This method overrides KafkaConsumer but we can't annotate due to the way Java
      * determines types on static methods.
@@ -161,10 +161,10 @@ public class FHRConsumer extends KafkaConsumer {
         options.addOption(optFactory.create("f", "family", true, "Column family."));
         options.addOption(optFactory.create("q", "qualifier", true, "Column qualifier."));
         options.addOption(optFactory.create("pd", "prefixdate", false, "Prefix key with salted date."));
-        
+
         return options;
     }
-    
+
     /**
      * This method overrides KafkaConsumer but we can't annotate due to the way Java
      * determines types on static methods.
@@ -190,38 +190,39 @@ public class FHRConsumer extends KafkaConsumer {
                 }
             }
         }
-        
+
         int numThreads = props.containsKey("consumer.threads") ? Integer.parseInt(props.getProperty("consumer.threads")) : DEFAULT_NUM_THREADS;
         // if numthreads specified on command-line then override
         if (cmd.hasOption("numthreads")) {
             numThreads = Integer.parseInt(cmd.getOptionValue("numthreads"));
         }
-        
+
         return new FHRConsumer(cmd.getOptionValue("topic"), props, numThreads);
     }
-    
+
     private class FHRConsumerWorker implements Callable<Void> {
-        
+
         private final KafkaStream<Message> stream;
         private final CountDownLatch latch;
-        
+
         public FHRConsumerWorker(KafkaStream<Message> stream, CountDownLatch latch) {
             this.stream = stream;
             this.latch = latch;
         }
-        
+
         @Override
-        public Void call() throws Exception {                  
+        public Void call() throws Exception {
             try {
                 for (MessageAndMetadata<Message> mam : stream) {
                     BagheeraMessage bmsg = BagheeraMessage.parseFrom(ByteString.copyFrom(mam.message().payload()));
-                    // get the sink for this message's namespace 
+                    // get the sink for this message's namespace
                     // (typically only one sink unless a regex pattern was used to listen to multiple topics)
                     KeyValueSink sink = sinkFactory.getSink(bmsg.getNamespace());
-                    if (bmsg.getOperation() == Operation.CREATE_UPDATE && 
+                    if (bmsg.getOperation() == Operation.CREATE_UPDATE &&
                         bmsg.hasId() && bmsg.hasPayload()) {
+                        String payloadString = bmsg.getPayload().toStringUtf8();
                         try {
-                            ObjectNode document = jsonMapper.readValue(bmsg.getPayload().toStringUtf8(), ObjectNode.class);
+                            ObjectNode document = jsonMapper.readValue(payloadString, ObjectNode.class);
                             // do a geoip lookup on the IP if we have one
                             if (bmsg.hasIpAddr()) {
                                 Location location = geoIpLookupService.getLocation(InetAddress.getByAddress(bmsg.getIpAddr().toByteArray()));
@@ -236,17 +237,22 @@ public class FHRConsumer extends KafkaConsumer {
                                 unknownGeoIpMeter.mark();
                                 document.put(GEO_COUNTRY_FIELD, UNKNOWN_COUNTRY_CODE);
                             }
-                            
+
                             // store the document
                             if (bmsg.hasTimestamp()) {
                                 sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document), bmsg.getTimestamp());
                             } else {
                                 sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document));
                             }
-                        } catch (JsonParseException jpe) {
+                        } catch (JsonParseException e) {
                             invalidJsonMeter.mark();
-                            LOG.error("Invalid JSON");
-                        }                        
+                            LOG.error("Invalid JSON", e);
+                            LOG.debug(payloadString);
+                        } catch (JsonMappingException e) {
+                            invalidJsonMeter.mark();
+                            LOG.error("Invalid JSON", e);
+                            LOG.debug(payloadString);
+                        }
                     } else if (bmsg.getOperation() == Operation.DELETE &&
                         bmsg.hasId()) {
                         sink.delete(bmsg.getId());
@@ -262,22 +268,22 @@ public class FHRConsumer extends KafkaConsumer {
             } finally {
                 latch.countDown();
             }
-            
+
             return null;
         }
     }
-    
+
     public static void main(String[] args) {
-        Options options = FHRConsumer.getOptions();        
+        Options options = FHRConsumer.getOptions();
         CommandLineParser parser = new GnuParser();
         ShutdownHook sh = ShutdownHook.getInstance();
         try {
             // Parse command line options
             CommandLine cmd = parser.parse(options, args);
-            
+
             final FHRConsumer consumer = (FHRConsumer)FHRConsumer.fromOptions(cmd);
             sh.addFirst(consumer);
-            
+
             // Set the sink for consumer storage
             SinkConfiguration sinkConfig = new SinkConfiguration();
             if (cmd.hasOption("numthreads")) {
@@ -290,10 +296,10 @@ public class FHRConsumer extends KafkaConsumer {
             KeyValueSinkFactory sinkFactory = KeyValueSinkFactory.getInstance(HBaseSink.class, sinkConfig);
             sh.addLast(sinkFactory);
             consumer.setSinkFactory(sinkFactory);
-            
+
             // Initialize metrics collection, reporting, etc.
             final MetricsManager manager = MetricsManager.getDefaultMetricsManager();
-            
+
             // Begin polling
             consumer.poll();
         } catch (ParseException e) {
