@@ -49,6 +49,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.log4j.Logger;
 
 import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.protobuf.ByteString;
@@ -68,7 +69,6 @@ import com.mozilla.bagheera.util.ShutdownHook;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricName;
-import com.mozilla.bagheera.metrics.MetricsManager;
 
 public class FHRConsumer extends KafkaConsumer {
 
@@ -220,8 +220,9 @@ public class FHRConsumer extends KafkaConsumer {
                     KeyValueSink sink = sinkFactory.getSink(bmsg.getNamespace());
                     if (bmsg.getOperation() == Operation.CREATE_UPDATE && 
                         bmsg.hasId() && bmsg.hasPayload()) {
+                        String payloadString = bmsg.getPayload().toStringUtf8();
                         try {
-                            ObjectNode document = jsonMapper.readValue(bmsg.getPayload().toStringUtf8(), ObjectNode.class);
+                            ObjectNode document = jsonMapper.readValue(payloadString, ObjectNode.class);
                             // do a geoip lookup on the IP if we have one
                             if (bmsg.hasIpAddr()) {
                                 Location location = geoIpLookupService.getLocation(InetAddress.getByAddress(bmsg.getIpAddr().toByteArray()));
@@ -243,10 +244,15 @@ public class FHRConsumer extends KafkaConsumer {
                             } else {
                                 sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document));
                             }
-                        } catch (JsonParseException jpe) {
+                        } catch (JsonParseException e) {
                             invalidJsonMeter.mark();
-                            LOG.error("Invalid JSON");
-                        }                        
+                            LOG.error("Invalid JSON", e);
+                            LOG.debug(payloadString);
+                        } catch (JsonMappingException e) {
+                            invalidJsonMeter.mark();
+                            LOG.error("Invalid JSON", e);
+                            LOG.debug(payloadString);
+                        }
                     } else if (bmsg.getOperation() == Operation.DELETE &&
                         bmsg.hasId()) {
                         sink.delete(bmsg.getId());
