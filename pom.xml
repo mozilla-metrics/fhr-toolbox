@@ -4,7 +4,7 @@
 
 	<groupId>com.mozilla</groupId>
 	<artifactId>fhr-toolbox</artifactId>
-	<version>0.6-SNAPSHOT</version>
+	<version>0.6</version>
 
 	<name>fhr-toolbox</name>
 	<description>A library of tools for dealing with Firefox Health Report data.</description>
