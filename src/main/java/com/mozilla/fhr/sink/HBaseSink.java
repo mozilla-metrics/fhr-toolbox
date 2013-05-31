@@ -52,7 +52,7 @@ public class HBaseSink implements KeyValueSink {
     private static final Logger LOG = Logger.getLogger(HBaseSink.class);
 
     private static final int DEFAULT_POOL_SIZE = Runtime.getRuntime().availableProcessors();
-    private static final int DEFAULT_BATCH_SIZE = 100;
+    static final int DEFAULT_BATCH_SIZE = 100;
 
     private int retryCount = 5;
     private int retrySleepSeconds = 30;
@@ -173,6 +173,9 @@ public class HBaseSink implements KeyValueSink {
             } catch (IOException e) {
                 LOG.warn(String.format("Error in flush attempt %d of %d, clearing Region cache", (i+1), getRetryCount()), e);
                 lastException = e;
+                // TODO: Clear the region cache.  Is this the correct way?
+//                HConnection connection = HConnectionManager.getConnection(table.getConfiguration());
+//                connection.clearRegionCache();
                 try {
                     Thread.sleep(getRetrySleepSeconds() * 1000);
                 } catch (InterruptedException e1) {
