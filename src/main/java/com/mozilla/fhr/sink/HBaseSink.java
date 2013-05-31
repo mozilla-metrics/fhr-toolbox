@@ -29,17 +29,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.HTableInterface;
+import org.apache.hadoop.hbase.client.HTablePool;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
 
 import com.mozilla.bagheera.sink.KeyValueSink;
-import com.mozilla.bagheera.sink.KeyValueSinkFactory;
 import com.mozilla.bagheera.sink.SinkConfiguration;
-import com.mozilla.bagheera.util.ShutdownHook;
 import com.mozilla.bagheera.util.IdUtil;
-
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Meter;
@@ -70,6 +69,9 @@ public class HBaseSink implements KeyValueSink {
     protected AtomicInteger putsQueueSize = new AtomicInteger();
     protected ConcurrentLinkedQueue<Put> putsQueue = new ConcurrentLinkedQueue<Put>();
 
+    protected AtomicInteger deletesQueueSize = new AtomicInteger();
+    protected ConcurrentLinkedQueue<Delete> deletesQueue = new ConcurrentLinkedQueue<Delete>();
+
     protected final Meter stored;
     protected final Meter deleted;
     protected final Meter deleteFailed;
@@ -79,7 +81,7 @@ public class HBaseSink implements KeyValueSink {
     protected final Timer htableTimer;
 
     protected final Gauge<Integer> batchSizeGauge;
-    
+
     public HBaseSink(SinkConfiguration sinkConfiguration) {
         this(sinkConfiguration.getString("hbasesink.hbase.tablename"),
              sinkConfiguration.getString("hbasesink.hbase.column.family", "data"),
@@ -156,7 +158,7 @@ public class HBaseSink implements KeyValueSink {
                     stored.mark(puts.size());
                 } finally {
                     flushTimerContext.stop();
-                    if ( table != null) {
+                    if (table != null) {
                         table.close();
                     }
                 }
@@ -231,23 +233,46 @@ public class HBaseSink implements KeyValueSink {
 
     @Override
     public void delete(String key) throws IOException {
+        Delete d = new Delete(Bytes.toBytes(key));
+        deletesQueue.add(d);
+        if (deletesQueueSize.incrementAndGet() >= batchSize) {
+            flushDeletes();
+        }
+    }
+
+    public void flushDeletes() throws IOException {
         HTableInterface table = hbasePool.getTable(tableName);
         boolean deleteSucceeded = false;
         try {
-            Delete d = new Delete(Bytes.toBytes(key));
-            table.delete(d);
-            // TODO: how can we tell if we actually deleted a row?
+            table.setAutoFlush(false);
+            List<Delete> deletes = new ArrayList<Delete>(batchSize);
+            // TODO: can we miss some here, if there are more than 'batchSize' deletes in the queue on the final call to flushDelete()? Same with flush()?
+            // TODO: add a loop until deletesQueue is empty.
+            while(!deletesQueue.isEmpty() && deletes.size() < batchSize) {
+                Delete d = deletesQueue.poll();
+                if (d != null) {
+                    deletes.add(d);
+                    deletesQueueSize.decrementAndGet();
+                }
+            }
+            table.delete(deletes);
+            table.flushCommits();
+
+            // TODO: how can we tell if we actually deleted the row(s)?
             deleteSucceeded = true;
-            deleted.mark();
+            deleted.mark(deletes.size());
         } finally {
-            if (hbasePool != null && table != null) {
-                hbasePool.putTable(table);
+            if (table != null) {
+                table.close();
+            }
+
+            if (!deleteSucceeded) {
+                deleteFailed.mark();
+                LOG.warn("Error flushing deletes.");
             }
         }
 
-        if (!deleteSucceeded) {
-            deleteFailed.mark();
-        }
+        LOG.debug("Flush Deletes finished");
     }
 
     public int getRetryCount() {
