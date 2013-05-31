@@ -290,7 +290,7 @@ public class FHRConsumer extends KafkaConsumer {
                 sinkConfig.setInt("hbasesink.hbase.numthreads", Integer.parseInt(cmd.getOptionValue("numthreads")));
             }
             if (cmd.hasOption("batchsize")) {
-                sinkConfig.setInt("hbasesink.hbase.batchsize", Integer.parseInt(cmd.getOptionValue("batch")));
+                sinkConfig.setInt("hbasesink.hbase.batchsize", Integer.parseInt(cmd.getOptionValue("batchsize")));
             }
 
             sinkConfig.setString("hbasesink.hbase.tablename", cmd.getOptionValue("table"));
