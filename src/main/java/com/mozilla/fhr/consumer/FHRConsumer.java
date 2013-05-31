@@ -161,7 +161,7 @@ public class FHRConsumer extends KafkaConsumer {
         options.addOption(optFactory.create("f", "family", true, "Column family."));
         options.addOption(optFactory.create("q", "qualifier", true, "Column qualifier."));
         options.addOption(optFactory.create("pd", "prefixdate", false, "Prefix key with salted date."));
-
+        options.addOption(optFactory.create("b", "batchsize", true, "Batch size (number of messages per HBase flush)."));
         return options;
     }
 
@@ -289,6 +289,10 @@ public class FHRConsumer extends KafkaConsumer {
             if (cmd.hasOption("numthreads")) {
                 sinkConfig.setInt("hbasesink.hbase.numthreads", Integer.parseInt(cmd.getOptionValue("numthreads")));
             }
+            if (cmd.hasOption("batchsize")) {
+                sinkConfig.setInt("hbasesink.hbase.batchsize", Integer.parseInt(cmd.getOptionValue("batchsize")));
+            }
+
             sinkConfig.setString("hbasesink.hbase.tablename", cmd.getOptionValue("table"));
             sinkConfig.setString("hbasesink.hbase.column.family", cmd.getOptionValue("family", "data"));
             sinkConfig.setString("hbasesink.hbase.column.qualifier", cmd.getOptionValue("qualifier", "json"));
