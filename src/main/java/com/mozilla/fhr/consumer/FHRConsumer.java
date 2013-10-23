@@ -237,7 +237,7 @@ public class FHRConsumer extends KafkaConsumer {
                                 unknownGeoIpMeter.mark();
                                 document.put(GEO_COUNTRY_FIELD, UNKNOWN_COUNTRY_CODE);
                             }
-
+                            LOG.info("CONSUMER_PUT "+bmsg.getNamespace()+" "+bmsg.getId());
                             // store the document
                             if (bmsg.hasTimestamp()) {
                                 sink.store(bmsg.getId(), jsonMapper.writeValueAsBytes(document), bmsg.getTimestamp());
@@ -255,6 +255,7 @@ public class FHRConsumer extends KafkaConsumer {
                         }
                     } else if (bmsg.getOperation() == Operation.DELETE &&
                         bmsg.hasId()) {
+                        LOG.info("CONSUMER_PUT "+bmsg.getNamespace()+" "+bmsg.getId());
                         sink.delete(bmsg.getId());
                     }
                     consumed.mark();
