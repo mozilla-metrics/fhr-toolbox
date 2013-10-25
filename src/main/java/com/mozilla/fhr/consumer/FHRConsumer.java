@@ -255,7 +255,7 @@ public class FHRConsumer extends KafkaConsumer {
                         }
                     } else if (bmsg.getOperation() == Operation.DELETE &&
                         bmsg.hasId()) {
-                        LOG.info("CONSUMER_PUT "+bmsg.getNamespace()+" "+bmsg.getId());
+                        LOG.info("CONSUMER_DELETE "+bmsg.getNamespace()+" "+bmsg.getId());
                         sink.delete(bmsg.getId());
                     }
                     consumed.mark();

@@ -4,7 +4,7 @@
 
 	<groupId>com.mozilla</groupId>
 	<artifactId>fhr-toolbox</artifactId>
-	<version>0.7-SNAPSHOT</version>
+	<version>0.7</version>
 
 	<name>fhr-toolbox</name>
 	<description>A library of tools for dealing with Firefox Health Report data.</description>
@@ -347,7 +347,7 @@
 		<dependency>
 		    <groupId>com.mozilla</groupId>
 		    <artifactId>bagheera</artifactId>
-		    <version>0.9</version>
+		    <version>0.12</version>
 		</dependency>
 		
 		<!-- Jackson JSON Processor -->
