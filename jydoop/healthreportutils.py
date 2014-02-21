@@ -383,7 +383,10 @@ class FHRMapper(object):
                 return
 
             if self.max_day_age:
-                d = payload.this_ping_date
+                try:
+                    d = payload.this_ping_date
+                except ValueError:
+                    return
                 age = self.today - d
 
                 if age.days > self.max_day_age:
