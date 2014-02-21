@@ -288,12 +288,17 @@ class FHRPayload(object):
                 yield day, engine, where, v
 
 
-def setupjob(job, args):
+def base_setup(job):
+    job.getConfiguration().set("mapred.job.queue.name", "research")
+
+def setup_full_scan(job, args):
     """
     Set up a job to run full table scans for FHR data.
 
     We don't expect any arguments.
     """
+
+    base_setup(job)
 
     import org.apache.hadoop.hbase.client.Scan as Scan
     import com.mozilla.hadoop.hbase.mapreduce.MultiScanTableMapReduceUtil as MSTMRU
@@ -312,6 +317,37 @@ def setupjob(job, args):
     # inform HadoopDriver about the columns we expect to receive
     job.getConfiguration().set("org.mozilla.jydoop.hbasecolumns", "data:json");
 
+known_sequences = {
+    '1pct': '/user/sguha/fhr/samples/output/1pct',
+    '5pct': '/user/sguha/fhr/samples/output/5pct',
+    'nightly': '/user/sguha/fhr/samples/output/nightly',
+    'aurora': '/user/sguha/fhr/samples/output/aurora',
+    'beta': '/user/sguha/fhr/samples/output/beta',
+}
+
+def setup_sequence_scan(job, args):
+    """
+    Set up a job which runs on precomputed sequence files. These are
+    de-orphaned subsets of the full document store which are either samples
+    or subsets of particular channels.
+
+    You can specify a sample type by name or by full path.
+    """
+
+    from org.apache.hadoop.mapreduce.lib.input import FileInputFormat, SequenceFileAsTextInputFormat
+
+    path, = args
+    if path in known_sequences:
+        path = known_sequences[path]
+
+    if not path.startswith('/'):
+        raise ValueError("Invalid sequence path")
+
+    base_setup(job)
+
+    job.setInputFormatClass(SequenceFileAsTextInputFormat)
+    FileInputFormat.setInputPaths(job, path)
+    job.getConfiguration().set("org.mozilla.jydoop.mappertype", "TEXT")
 
 class FHRMapper(object):
     """Decorator used to annotate a Firefox Health Report mapping function.
@@ -329,8 +365,7 @@ class FHRMapper(object):
         max_day_age -- If set to an integer, payloads older than this many days
         will be filtered out.
     """
-    def __init__(self, only_major_channels=False, max_day_age=None,
-        minimum_days_count=None):
+    def __init__(self, only_major_channels=False, max_day_age=None):
 
         self.only_major_channels = only_major_channels
         self.max_day_age = max_day_age
@@ -352,9 +387,9 @@ class FHRMapper(object):
                 age = self.today - d
 
                 if age.days > self.max_day_age:
-                    return empty
+                    return
 
-            return func(key, payload, context)
+            func(key, payload, context)
 
         return wrapper
 
