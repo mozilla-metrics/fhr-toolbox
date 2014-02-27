@@ -65,7 +65,7 @@ import com.mozilla.bagheera.sink.KeyValueSink;
 import com.mozilla.bagheera.sink.KeyValueSinkFactory;
 import com.mozilla.bagheera.sink.SinkConfiguration;
 import com.mozilla.bagheera.util.ShutdownHook;
-import com.mozilla.fhr.sink.HBaseSink;
+import com.mozilla.bagheera.sink.HBaseSink;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Meter;
 import com.yammer.metrics.core.MetricName;
