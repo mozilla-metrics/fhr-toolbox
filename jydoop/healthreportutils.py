@@ -72,6 +72,9 @@ class FHRPayload(object):
         if v != 2:
             raise UnsupportedPayloadVersionError(v)
 
+    def get(self, k, d):
+        return self._o.get(k, d)
+
     def __getitem__(self, k):
         return self._o[k]
 
