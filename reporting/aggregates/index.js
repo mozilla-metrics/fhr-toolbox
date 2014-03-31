@@ -50,6 +50,39 @@ d3.selection.prototype.positionRect = function(x, y, width, height) {
   return this;
 };
 
+function Dimensions(o) {
+  if (!(this instanceof Dimensions)) {
+    throw Error("Use new Dimensions()");
+  }
+  if (o !== undefined) {
+    for (var k in o) {
+      this[k] = o[k];
+    }
+  }
+}
+Dimensions.prototype.radius = function() {
+  return Math.min(this.width, this.height) / 2;
+};
+Dimensions.prototype.totalWidth = function() {
+  return this.width + this.marginLeft + this.marginRight;
+};
+Dimensions.prototype.totalHeight = function() {
+  return this.height + this.marginTop + this.marginBottom;
+};
+Dimensions.prototype.transformUpperLeft = function(e) {
+  e.attr("transform", "translate(" + this.marginLeft + "," + this.marginTop + ")");
+};
+Dimensions.prototype.transformCenter = function(e) {
+  e.attr("transform", "translate(" + (this.marginLeft + this.width / 2) + "," +
+         (this.marginTop + this.height / 2) + ")");
+};
+Dimensions.prototype.setupSVG = function(e) {
+  e.attr({
+    width: this.totalWidth(),
+    height: this.totalHeight()
+  });
+};
+
 function fetchDays() {
   d3.xhr(DATA_URL + "/days.csv", "text/plain")
     .get()
@@ -139,20 +172,20 @@ function setupDays() {
   var color = d3.scale.ordinal()
     .range(colors).domain([1, 2, 3, 4, 5, 6, 7]);
 
-  var height = 250;
-  var width = 80;
-  var margin = {
-    top: 5,
-    left: 50,
-    right: 15,
-    bottom: 130
-  };
+  var dims = new Dimensions({
+    width: 80,
+    height: 250,
+    marginTop: 5,
+    marginLeft: 50,
+    marginRight: 15,
+    marginBottom: 130
+  });
 
   var x = d3.scale.ordinal()
-    .rangeRoundBands([width, 0], 0.2)
+    .rangeRoundBands([dims.width, 0], 0.2)
     .domain(saturdays);
   var y = d3.scale.linear()
-    .rangeRound([0, height])
+    .rangeRound([0, dims.height])
     .domain([maxUsers * 1.1, 0]);
 
   var yAxis = d3.svg.axis()
@@ -165,15 +198,13 @@ function setupDays() {
     .orient("bottom");
 
   var svgg = d3.select("#users svg")
-    .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
+    .text("").call(dims.setupSVG.bind(dims))
     .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    .call(dims.transformUpperLeft.bind(dims));
 
   svgg.append("g")
     .attr("class", "x axis")
-    .attr("transform", "translate(0," + height + ")")
+    .attr("transform", "translate(0," + dims.height + ")")
     .call(xAxis)
     .selectAll("text")
     .attr("y", 0)
@@ -186,8 +217,8 @@ function setupDays() {
     .call(yAxis);
 
   svgg.append("text")
-    .attr("y", height + margin.bottom - 5)
-    .attr("x", width / 2)
+    .attr("y", dims.height + dims.marginBottom - 5)
+    .attr("x", dims.width / 2)
     .attr("text-anchor", "middle")
     .text("Week Ending");
 
@@ -209,7 +240,7 @@ function setupDays() {
     .attr("fill", function(d) { return color(d.n); });
 
   y = d3.scale.linear()
-    .rangeRound([0, height])
+    .rangeRound([0, dims.height])
     .domain([maxUserDays * 1.1, 0]);
 
   yAxis = d3.svg.axis()
@@ -220,14 +251,13 @@ function setupDays() {
 
   svgg = d3.select("#usage svg")
     .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
+    .call(dims.setupSVG.bind(dims))
     .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    .call(dims.transformUpperLeft.bind(dims));
 
   svgg.append("g")
     .attr("class", "x axis")
-    .attr("transform", "translate(0," + height + ")")
+    .attr("transform", "translate(0," + dims.height + ")")
     .call(xAxis)
     .selectAll("text")
     .attr("y", 0)
@@ -295,14 +325,14 @@ function setupUsers() {
     });
   var channel = userNest.map(gUsers.get(currentChannel()), d3.map);
 
-  var height = 300;
-  var width = 150;
-  var margin = {
-    top: 35,
-    bottom: 10,
-    left: 50,
-    right: 10
-  };
+  var dims = new Dimensions({
+    width: 150,
+    height: 300,
+    marginTop: 35,
+    marginBottom: 10,
+    marginLeft: 50,
+    marginRight: 10
+  });
 
   var active = channel.get("active");
   var lost = channel.get("lost");
@@ -320,11 +350,11 @@ function setupUsers() {
     maxCount += change;
   }
   var x = d3.scale.ordinal()
-    .rangeRoundBands([0, width], 0.25)
+    .rangeRoundBands([0, dims.width], 0.25)
     .domain(["active", "lost", "returning"]);
 
   var y = d3.scale.linear()
-    .rangeRound([0, height])
+    .rangeRound([0, dims.height])
     .domain([maxCount * 1.05, 0]);
 
   var yAxis = d3.svg.axis()
@@ -334,11 +364,9 @@ function setupUsers() {
     .tickFormat(d3.format("s"));
 
   var svgg = d3.select("#retention svg")
-    .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
+    .text("").call(dims.setupSVG.bind(dims))
     .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    .call(dims.transformUpperLeft.bind(dims));
 
   svgg.append("g")
     .attr("class", "y axis")
@@ -346,8 +374,8 @@ function setupUsers() {
   svgg.append("g")
     .attr("class", "x axis")
     .append("line")
-    .attr("x1", 0).attr("y1", height)
-    .attr("x2", width).attr("y2", height);
+    .attr("x1", 0).attr("y1", dims.height)
+    .attr("x2", dims.width).attr("y2", dims.height);
 
   var colors = {
     "active": "#4C6185",
@@ -362,7 +390,7 @@ function setupUsers() {
 
   svgg.append("rect")
     .attr("class", "bar")
-    .positionRect(x("active"), y(activeCount), x.rangeBand(), height - y(activeCount))
+    .positionRect(x("active"), y(activeCount), x.rangeBand(), dims.height - y(activeCount))
     .attr("fill", colors["active"]);
 
   var current = activeCount;
@@ -374,7 +402,7 @@ function setupUsers() {
 
   svgg.append("rect")
     .attr("class", "bar")
-    .positionRect(x("lost"), y(current), x.rangeBand(), -y(lostCount) + height)
+    .positionRect(x("lost"), y(current), x.rangeBand(), -y(lostCount) + dims.height)
     .attr("fill", colors["lost"]);
 
   current -= lostCount;
@@ -385,30 +413,30 @@ function setupUsers() {
     .attr("y1", y(current)).attr("y2", y(current));
 
   svgg.append("rect")
-    .positionRect(x("returning"), y(current), x.rangeBand(), y(returningCount) - height)
+    .positionRect(x("returning"), y(current), x.rangeBand(), y(returningCount) - dims.height)
     .attr("fill", colors["returning"]);
 
   current += returningCount;
 
   svgg.append("rect")
-    .positionRect(x("returning"), y(current), x.rangeBand(), y(newCount) - height)
+    .positionRect(x("returning"), y(current), x.rangeBand(), y(newCount) - dims.height)
     .attr("fill", colors["new"]);
 
   svgg.append("text")
-    .attr("x", width / 2)
+    .attr("x", dims.width / 2)
     .text("\u0394 " + d3.format("+.2s")(change))
     .attr("text-anchor", "middle");
 
-  height = 250;
-  width = 500;
-  var legendHeight = 60;
-  var legendWidth = 200;
-  margin = {
-    top: 10,
-    bottom: 40,
-    left: 80,
-    right: 10
-  };
+  dims = new Dimensions({
+    width: 500,
+    height: 250,
+    legendHeight: 60,
+    legendWidth: 200,
+    marginTop: 10,
+    marginBottom: 40,
+    marginLeft: 80,
+    marginRight: 10
+  });
 
   var parser = d3.time.format.utc("%Y-%m-%d").parse;
   var data = newdata.entries().map(function(d) {
@@ -437,10 +465,10 @@ function setupUsers() {
   var endDate = data.slice(-1)[0].date;
 
   var x = d3.time.scale()
-    .range([0, width])
+    .range([0, dims.width])
     .domain([dateAdd(startDate, MS_PER_DAY * -.5), dateAdd(endDate, MS_PER_DAY * .5)]);
   var y = d3.scale.linear()
-    .rangeRound([0, height])
+    .rangeRound([0, dims.height])
     .domain([maxNew * 1.05, 0]);
 
   var xAxis = d3.svg.axis()
@@ -453,11 +481,8 @@ function setupUsers() {
     .orient("left");
 
   svgg = d3.select("#newbyday svg")
-    .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformUpperLeft.bind(dims));
 
   // shade the weekends
   var weekends = [];
@@ -480,12 +505,12 @@ function setupUsers() {
       x: function(d) { return x(dateAdd(d, MS_PER_DAY * -.5)); },
       width: x(dateAdd(startDate, MS_PER_DAY / 2)),
       y: 0,
-      height: height
+      height: dims.height
     });
 
   svgg.append("g")
     .attr("class", "x axis")
-    .attr("transform", "translate(0," + height + ")")
+    .attr("transform", "translate(0," + dims.height + ")")
     .call(xAxis);
 
   svgg.append("g")
@@ -527,14 +552,14 @@ function setupUsers() {
 
   var legend = svgg.append("g")
     .attr("class", "legend")
-    .attr("transform", "translate(15," + (height - legendHeight - 15) +")");
+    .attr("transform", "translate(15," + (dims.height - dims.legendHeight - 15) +")");
   legend.append("rect")
     .attr("class", "legend-outline")
     .attr({
       x: 0,
       y: 0,
-      height: legendHeight,
-      width: legendWidth
+      height: dims.legendHeight,
+      width: dims.legendWidth
     });
   legend.append("line")
     .attr("class", "line main")
@@ -565,13 +590,6 @@ function setupUsers() {
     })
     .text("7-day rolling average");
 }
-
-d3.select("#channel-form").on("change",
-  function() {
-    setupDays();
-    setupUsers();
-    setupStats();
-  });
 
 function fetchStats() {
   d3.xhr(DATA_URL + "/stats.csv", "text/plain")
@@ -626,16 +644,14 @@ function setupStats() {
   defaultBrowser.sort(function(a, b) { return b.value - a.value; });
   var defaultTotal = d3.sum(defaultBrowser, function(d) { return d.value; });
 
-  var height = 100;
-  var width = 100;
-  var radius = Math.min(width, height) / 2;
-
-  var margin = {
-    top: 5,
-    left: 5,
-    bottom: 5,
-    right: 5
-  };
+  var dims = new Dimensions({
+    width: 100,
+    height: 100,
+    marginTop: 5,
+    marginLeft: 5,
+    marginBottom: 5,
+    marginRight: 5
+  });
 
   var colors = {
     "?": "#D294EB",
@@ -644,12 +660,8 @@ function setupStats() {
   };
 
   var svgg = d3.select("#defaultBrowser svg")
-    .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", "translate(" + (margin.left + width / 2) + "," +
-          (margin.top + height / 2) + ")");
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformCenter.bind(dims));
 
   var pie = d3.layout.pie()
     .sort(null)
@@ -662,7 +674,7 @@ function setupStats() {
     .attr("class", "arc");
 
   var arc = d3.svg.arc()
-    .outerRadius(radius).innerRadius(0);
+    .outerRadius(dims.radius()).innerRadius(0);
 
   g.append("path")
     .attr("d", arc)
@@ -691,7 +703,7 @@ function setupStats() {
         case "1_1":
           return "Automatic";
         case "1_0":
-          return "Enabled";
+          return "Prompted";
         case "0_0":
           return "Disabled";
       }
@@ -703,14 +715,14 @@ function setupStats() {
   var updates = updateNest.map(channelData, d3.map);
   updates = [
     { key: "Automatic", value: updates.get("Automatic") },
-    { key: "Enabled", value: updates.get("Enabled") },
+    { key: "Prompted", value: updates.get("Prompted") },
     { key: "Disabled", value: updates.get("Disabled") },
     { key: "Unknown", value: updates.get("Unknown") }
   ];
 
   colors = {
     "Automatic": "#94EB9F",
-    "Enabled": "#EBCC94",
+    "Prompted": "#EBCC94",
     "Disabled": "#EB9F94",
     "Unknown": "#D294EB"
   };
@@ -730,12 +742,8 @@ function setupStats() {
   });
 
   svgg = d3.select("#updatesEnabled svg")
-    .text("")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", "translate(" + (margin.left + width / 2) + "," +
-          (margin.top + height / 2) + ")");
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformCenter.bind(dims));
 
   pie = d3.layout.pie()
     .sort(null)
@@ -750,6 +758,13 @@ function setupStats() {
     .attr("d", arc)
     .attr("fill", function(d) { return colors[d.data.key]; });
 }
+
+d3.select("#channel-form").on("change",
+  function() {
+    setupDays();
+    setupUsers();
+    setupStats();
+  });
 
 fetchDays();
 fetchUsers();
