@@ -4,6 +4,8 @@ var MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 var gSample = 0.05;
 
+var DATA_URL = "data";
+
 function sorted(l, comp) {
   l = l.slice();
   l.sort(comp);
@@ -24,7 +26,7 @@ function dateAdd(d, ms) {
   return new Date(d.getTime() + ms);
 }
 
-d3.xhr("days.csv", "text/plain")
+d3.xhr(DATA_URL + "/days.csv", "text/plain")
   .get()
   .on("load",
     function(t) {
@@ -234,7 +236,7 @@ function setupDays() {
     .attr("fill", function(d) { return color(d.n); });
 }
 
-d3.xhr("users.csv", "text/plain")
+d3.xhr(DATA_URL + "/users.csv", "text/plain")
   .get()
   .on("load",
     function(t) {
@@ -556,7 +558,7 @@ d3.select("#channel-form").on("change",
     setupStats();
   });
 
-d3.xhr("stats.csv", "text/plain")
+d3.xhr(DATA_URL + "/stats.csv", "text/plain")
   .get()
   .on("load",
     function(t) {
