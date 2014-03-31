@@ -6,6 +6,9 @@ var gSample = 0.05;
 
 var DATA_URL = "data";
 
+var channelNest = d3.nest()
+  .key(function (d) { return d.channel; });
+
 function sorted(l, comp) {
   l = l.slice();
   l.sort(comp);
@@ -26,34 +29,6 @@ function dateAdd(d, ms) {
   return new Date(d.getTime() + ms);
 }
 
-d3.xhr(DATA_URL + "/days.csv", "text/plain")
-  .get()
-  .on("load",
-    function(t) {
-      var daynest = d3.nest()
-        .key(function(d) { return d[0]; })
-        .key(function(d) { return d[1]; })
-        .sortKeys(d3.descending)
-        .rollup(function(week) {
-          var l = [];
-          week.forEach(function(day) {
-            l[day[2]] = day[3] / gSample;
-          });
-          return l;
-        });
-      var days = daynest.map(d3.csv.parseRows(t.responseText,
-        function(d, i) {
-          return [d[0], d[1], numeric(d[2]), numeric(d[3])];
-        }), d3.map);
-      gDays = days;
-      setupDays();
-    })
-  .on("error",
-    function(a1, a2) {
-      console.error(e);
-      alert("Error fetching days.csv: " + e);
-    });
-
 function numeric(v) {
   return +v;
 }
@@ -63,11 +38,56 @@ function currentChannel() {
   return r;
 }
 
+// This function doesn't accept normal d3 functions as values. It should be
+// refactored.
+d3.selection.prototype.positionRect = function(x, y, width, height) {
+  if (height < 0) {
+    y += height;
+    height = -height;
+  }
+  this.attr("x", x).attr("width", width)
+      .attr("y", y).attr("height", height);
+  return this;
+};
+
+function fetchDays() {
+  d3.xhr(DATA_URL + "/days.csv", "text/plain")
+    .get()
+    .on("load",
+      function(t) {
+        gDays = channelNest.map(d3.csv.parseRows(t.responseText,
+          function(d, i) {
+            return {
+              channel: d[0],
+              weekend: d[1],
+              days: numeric(d[2]),
+              count: numeric(d[3]) / gSample
+            };
+          }), d3.map);
+        setupDays();
+      })
+    .on("error",
+      function(a1, a2) {
+        console.error(e);
+        alert("Error fetching days.csv: " + e);
+      });
+}
+
 function setupDays() {
   if (!gDays) {
     return;
   }
-  var byweek = gDays.get(currentChannel());
+  var dayNest = d3.nest()
+    .key(function(d) { return d.weekend; })
+    .sortKeys(d3.descending)
+    .rollup(function(week) {
+      var l = [];
+      week.forEach(function(day) {
+        l[day.days] = day.count;
+      });
+      return l;
+    });
+  var byweek = dayNest.map(gDays.get(currentChannel()), d3.map);
 
   var maxUsers = 0;
   var maxUserDays = 0;
@@ -236,48 +256,45 @@ function setupDays() {
     .attr("fill", function(d) { return color(d.n); });
 }
 
-d3.xhr(DATA_URL + "/users.csv", "text/plain")
-  .get()
-  .on("load",
-    function(t) {
-      var usernest = d3.nest()
-        .key(function(d) { return d[0]; })
-        .key(function(d) { return d[1]; })
-        .key(function(d) { return d[2]; })
-        .sortKeys(d3.ascending)
-        .rollup(function(vl) {
-          if (vl.length != 1) {
-            throw Error("unexpected value");
-          }
-          return vl[0][3] / gSample;
-        });
-      var users = usernest.map(d3.csv.parseRows(t.responseText,
-        function(d, i) {
-          return [d[0], d[1], d[2], numeric(d[3])];
-        }), d3.map);
-      gUsers = users;
-      setupUsers();
-    })
-  .on("error",
-    function(e) {
-      console.error(e);
-      alert("Error fecthing users.csv: " + e);
-    });
-
-d3.selection.prototype.positionRect = function(x, y, width, height) {
-  if (height < 0) {
-    y += height;
-    height = -height;
-  }
-  this.attr("x", x).attr("width", width)
-      .attr("y", y).attr("height", height);
-  return this;
+function fetchUsers() {
+  d3.xhr(DATA_URL + "/users.csv", "text/plain")
+    .get()
+    .on("load",
+      function(t) {
+        gUsers = channelNest.map(d3.csv.parseRows(t.responseText,
+          function(d, i) {
+            return {
+              channel: d[0],
+              type: d[1],
+              day: d[2],
+              count: numeric(d[3]) / gSample
+            };
+          }), d3.map);
+        setupUsers();
+      })
+    .on("error",
+      function(e) {
+        console.error(e);
+        alert("Error fecthing users.csv: " + e);
+      });
 }
 
 function setupUsers() {
   if (!gUsers) {
     return;
   }
+  var userNest = d3.nest()
+    .key(function(d) { return d.type; })
+    .key(function(d) { return d.day; })
+    .sortKeys(d3.ascending)
+    .rollup(function(vl) {
+      if (vl.length != 1) {
+        throw Error("unexpected value");
+      }
+      return vl[0].count;
+    });
+  var channel = userNest.map(gUsers.get(currentChannel()), d3.map);
+
   var height = 300;
   var width = 150;
   var margin = {
@@ -286,8 +303,6 @@ function setupUsers() {
     left: 50,
     right: 10
   };
-
-  var channel = gUsers.get(currentChannel());
 
   var active = channel.get("active");
   var lost = channel.get("lost");
@@ -558,34 +573,34 @@ d3.select("#channel-form").on("change",
     setupStats();
   });
 
-d3.xhr(DATA_URL + "/stats.csv", "text/plain")
-  .get()
-  .on("load",
-    function(t) {
-      var channelNest = d3.nest()
-        .key(function(d) { return d.channel; });
-      gStats = channelNest.map(d3.csv.parseRows(t.responseText,
-        function(d, i) {
-          return {
-            channel: d[0],
-            version: d[1],
-            locale: d[2],
-            defaultBrowser: d[3],
-            telemetry: d[4],
-            autoUpdate: d[5],
-            updateEnabled: d[6],
-            geo: d[7],
-            addonsv: d[8],
-            count: numeric(d[9]) / gSample
-          };
-        }), d3.map);
-      setupStats();
-    })
-  .on("error",
-    function(err) {
-      console.error(err);
-      alert("Error fetching stats.csv: " + e);
-  });
+function fetchStats() {
+  d3.xhr(DATA_URL + "/stats.csv", "text/plain")
+    .get()
+    .on("load",
+      function(t) {
+        gStats = channelNest.map(d3.csv.parseRows(t.responseText,
+          function(d, i) {
+            return {
+              channel: d[0],
+              version: d[1],
+              locale: d[2],
+              defaultBrowser: d[3],
+              telemetry: d[4],
+              autoUpdate: d[5],
+              updateEnabled: d[6],
+              geo: d[7],
+              addonsv: d[8],
+              count: numeric(d[9]) / gSample
+            };
+          }), d3.map);
+        setupStats();
+      })
+    .on("error",
+      function(err) {
+        console.error(err);
+        alert("Error fetching stats.csv: " + e);
+    });
+}
 
 function setupStats() {
   if (!gStats) {
@@ -735,3 +750,7 @@ function setupStats() {
     .attr("d", arc)
     .attr("fill", function(d) { return colors[d.data.key]; });
 }
+
+fetchDays();
+fetchUsers();
+fetchStats();
