@@ -1,0 +1,120 @@
+body {
+  font-family: sans-serif;
+}
+
+h1 {
+  font-size: 140%;
+  font-weight: bold;
+  color: #C13832;
+}
+
+h2 {
+  font-size: 120%;
+  font-weight: normal;
+  border-bottom: 1px solid black;
+}
+
+section {
+  clear: both;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #999;
+}
+
+.narrow {
+  display: inline-block;
+  margin-right: 8px;
+  margin-left: 8px;
+  text-align: center;
+}
+.narrow h2 {
+  text-align: left;
+  padding-right: 10px;
+}
+
+#usersLegend {
+  vertical-align: top;
+  display: inline-block;
+  max-width: 60px;
+  border: 1px solid #333;
+  padding: 4px;
+  margin: 8px;
+  text-align: center;
+}
+#usersLegendList {
+  display: inline-block;
+  list-style-type: none;
+  margin: 0px;
+  padding: 0px;
+}
+#usersLegendList li {
+  display: inline-block;
+  margin: 2px;
+  padding: 2px;
+  width: 1em;
+  height: 1em;
+  text-align: center;
+}
+#retention-defs {
+  width: 15em;
+  float: left;
+  margin-right: 15px;
+}
+#retention-defs dt {
+  padding-left: 5px;
+  font-weight: bold;
+}
+.bar-connector {
+  stroke: #333;
+}
+.line.main {
+  stroke: #4C6185;
+  stroke-width: 1;
+  fill: none;
+}
+.point.main {
+  fill: #4C6185;
+}
+.line.rolling {
+  stroke: rgba(105,134,184,0.6);
+  stroke-width: 2;
+  fill: none;
+  stroke-dasharray: 5,3;
+}
+.weekend {
+  fill: #DCDEF2;
+}
+.legend-outline {
+  stroke: #333;
+  fill: #EEE;
+  stroke-width: 1;
+}
+.legend-color {
+  width: 1em;
+  border: 2px solid white;
+}
+.legend {
+  float: left;
+}
+
+@media screen and (min-width: 500px) {
+
+body {
+  padding-right: 112px;
+}
+
+#channel-form {
+  position: fixed;
+  right: 2px;
+  top: 2px;
+  width: 100px;
+  border: 1px solid #CCC;
+  padding: 4px;
+}
+.channel-span {
+  display: block;
+}
+}

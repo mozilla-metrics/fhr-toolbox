@@ -1,0 +1,103 @@
+<head>
+  <meta charset="UTF-8">
+  <title>FHR Aggregates</title>
+
+  <link rel="stylesheet" type="text/css" href="index.css">
+<body>
+  <h1>FHR Aggregates</h1>
+
+  <p>General notes:
+    <ul>
+      <li>FHR data isn't necessarily uploaded immediately, but we don't know
+        the extent of any lag. This report time-delays its findings
+        by four days, but the data in the most recent week may be lower
+        due to undercounting.
+      <li>This data comes from a heuristically de-orphaned data set, but
+        it is possible that we are both under- and over-counting some
+        profiles because of data issues.
+    </ul>
+
+  <form id="channel-form">
+    Select a release channel:
+    <span class="channel-span"><input type="radio" name="channel-selector" value="release" id="channel-release" checked><label for="channel-release">Release</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="beta" id="channel-beta"><label for="channel-beta">Beta</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="aurora" id="channel-aurora"><label for="channel-aurora">Aurora</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="nightly" id="channel-nightly"><label for="channel-nightly">Nightly</label></span>
+  </form>
+
+  <div>
+    <section id="users" class="narrow">
+      <h2>Active Profiles per Week</h2>
+      <svg></svg>
+    </section>
+    <section id="usage" class="narrow">
+      <h2>Usage Days per Week</h2>
+      <svg></svg>
+    </section>
+    <div id="usersLegend">
+      <p>Usage days per week:</p>
+      <ol id="usersLegendList">
+      </ol>
+    </div>
+  </div>
+
+  <section id="retention">
+    <h2>Acquisition/Retention/Loss</h2>
+
+    <dl id="retention-defs">
+      <dt id="retention-active">Active Profile</dt>
+      <dd>An active profile is one who has used the browser in the last six weeks
+        (42 days) and the prior six week period.</dd>
+
+      <dt id="retention-lost">Lost Profile</dt>
+      <dd>A lost profile was not active in the last six weeks but was active
+        in the prior six week period.</dd>
+
+      <dt id="retention-returning">Returning Profile</dt>
+      <dd>A returning profile was active within the past six weeks but was away
+        for six weeks or more before that.</dd>
+
+      <dt id="retention-new">New Profile</dt>
+      <dd>A new profile is one whose FHR record starts within the last six weeks.</dd>
+    </dl>
+
+    <svg></svg>
+
+    <p><em>Note: a profile-reset counts as lost/new profile. The lost/new
+        numbers here don't necessarily indicate user churn.</em></p>
+  </section>
+
+  <section id="newbyday">
+    <h2>New Profiles By Day</h2>
+
+    <p>On what days did new profiles appear?</p>
+
+    <svg></svg>
+  </section>
+
+  <section id="defaultBrowser" class="narrow">
+    <h2>Default Browser</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <section id="updatesEnabled" class="narrow">
+    <h2>Updates Enabled</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <section id="telemetryEnabled" class="narrow">
+    <h2>Telemetry Enabled</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <script src="http://d3js.org/d3.v3.min.js"></script>
+  <script src="index.js"></script>
