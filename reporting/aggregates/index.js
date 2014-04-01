@@ -38,6 +38,17 @@ function currentChannel() {
   return r;
 }
 
+function map_entries(m) {
+  var l = [];
+  m.forEach(function(k, v) {
+    l.push({
+      _key: k,
+      _value: v
+    });
+  });
+  return l;
+};
+
 // This function doesn't accept normal d3 functions as values. It should be
 // refactored.
 d3.selection.prototype.positionRect = function(x, y, width, height) {
@@ -745,10 +756,6 @@ function setupStats() {
     .text("").call(dims.setupSVG.bind(dims))
     .append("g").call(dims.transformCenter.bind(dims));
 
-  pie = d3.layout.pie()
-    .sort(null)
-    .value(function(d) { return d.value; });
-
   g = svgg.selectAll(".arc")
     .data(pie(updates))
     .enter()
@@ -757,6 +764,141 @@ function setupStats() {
     .append("path")
     .attr("d", arc)
     .attr("fill", function(d) { return colors[d.data.key]; });
+
+  var telemetryNest = d3.nest()
+    .key(function(d) { return d.telemetry; })
+    .rollup(function(vl) {
+      return d3.sum(vl, function(d) { return d.count; });
+    });
+  var telemetry = telemetryNest.map(channelData, d3.map).entries();
+  telemetry.sort(function(a, b) { return b.value - a.value; });
+
+  colors = {
+    "?": "#D294EB",
+    "0": "#EB9F94",
+    "1": "#94EB9F"
+  };
+
+  svgg = d3.select("#telemetryEnabled svg")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformCenter.bind(dims));
+
+  g = svgg.selectAll(".arc")
+    .data(pie(telemetry))
+    .enter()
+    .append("g")
+    .attr("class", "arc")
+    .append("path")
+    .attr("d", arc)
+    .attr("fill", function(d) { return colors[d.data.key]; });
+
+  tr = d3.select("#telemetryEnabled .legend tbody").selectAll("tr")
+    .data(telemetry, function(d) { return d.key; });
+
+  enter = tr.enter().append("tr");
+  enter.append("td").attr("class", "legend-color")
+    .style("background-color", function(d) { return colors[d.key]; });
+  enter.append("td").attr("class", "telemetry-label")
+    .text(function(d) { return triStateText(d.key); });
+  enter.append("td").attr("class", "telemetry-data");
+
+  tr.select(".telemetry-data").text(function(d) {
+    return d.value + ": " + d3.format(".1%")(d.value / defaultTotal);
+  });
+  buildLocale(channelData);
+}
+
+function buildLocale(channelData) {
+  var total = d3.sum(channelData, function(d) { return d.count; });
+  var localeNest = d3.nest()
+    .key(function(d) { return d.locale; })
+    .key(function(d) { return d.geo; })
+    .rollup(function(vl) {
+      return d3.sum(vl, function(d) { return d.count; });
+    });
+  var locales = localeNest.map(channelData, d3.map);
+  gLocales = locales;
+
+  var dims = new Dimensions({
+    width: 400,
+    height: 400,
+    marginTop: 5,
+    marginLeft: 5,
+    marginBottom: 5,
+    marginRight: 5
+  });
+  var color = d3.scale.category20c();
+  var svgg = d3.select("#bylocale-chart")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformCenter.bind(dims));
+
+  var rscale = d3.scale.ordinal()
+    .range([10, 10, dims.radius() * .8, dims.radius()]).domain([0, 1, 2, 3]);
+
+  var partition = d3.layout.partition()
+    .children(function(d) {
+      if (d.value && d.value.entries) {
+        return d.value.entries();
+      }
+      return null;
+    })
+    .value(function(d) {
+      return d.value;
+    })
+    .sort(function(a, b) {
+      return d3.ascending(a.key, b.key);
+    })
+    .size([2 * Math.PI, 3]);
+
+  var arc = d3.svg.arc()
+    .startAngle(function(d) { return d.x; })
+    .endAngle(function(d) { return d.x + d.dx; })
+    .innerRadius(function(d) {
+      return rscale(d.y);
+    })
+    .outerRadius(function(d) {
+      return rscale(d.y + 1);
+    });
+
+  var arcg = svgg.datum({value: locales}).selectAll(".arc")
+    .data(partition.nodes)
+    .enter().append("g");
+
+  arcg.append("path").attr("class", "arc")
+    .attr("d", arc)
+    .attr("stroke", function(d) {
+      if (d.depth == 2) {
+        return "rgba(0,0,100,0.5)";
+      }
+      return "rgba(255,255,255,0.4)";
+    })
+    .attr("fill", function(d) {
+      if (d.depth == 2) {
+        d = d.parent;
+      }
+      return color(d.key);
+    })
+    .attr("locale", function(d) {
+      var l = [];
+      while (d && d.key) {
+        l.unshift(d.key);
+        d = d.parent;
+      }
+      return l.join(":");
+    });
+  arcg.filter(function(d) { return d.depth == 1; })
+    .append("text").attr("class", "arc-label")
+    .attr("fill", function(d) {
+      var l = d3.hsl(color(d.key)).l;
+      return l > 0.5 ? "black" : "white";
+    })
+    .attr("transform", function(d) {
+      return "rotate(" + ((d.x + d.dx / 2) / Math.PI * 180 - 90) +")";
+    })
+    .attr("x", rscale(2) - 4)
+    .text(function(d) {
+      return d.key;
+    });
 }
 
 d3.select("#channel-form").on("change",

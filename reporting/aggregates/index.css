@@ -99,6 +99,10 @@ section {
 .legend {
   float: left;
 }
+.arc-label {
+  text-anchor: end;
+  dominant-baseline: middle;
+}
 
 @media screen and (min-width: 500px) {
 
