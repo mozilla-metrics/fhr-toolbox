@@ -99,9 +99,18 @@ section {
 .legend {
   float: left;
 }
-.arc-label {
-  text-anchor: end;
-  dominant-baseline: middle;
+.arc-label path {
+  stroke: #333;
+}
+.arc-label text {
+  text-anchor: start;
+  dominant-baseline: hanging;
+}
+.arc-label rect {
+  fill: rgba(0,0,0,0.2);
+}
+#measurer {
+  visibility: hidden;
 }
 
 @media screen and (min-width: 500px) {

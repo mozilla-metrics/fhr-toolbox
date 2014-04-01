@@ -1,6 +1,7 @@
 var gDays, gUsers, gStats;
 
 var MS_PER_DAY = 1000 * 60 * 60 * 24;
+var gTextHeight = 15;
 
 var gSample = 0.05;
 
@@ -33,21 +34,60 @@ function numeric(v) {
   return +v;
 }
 
+function polarToRect(r, a) {
+  // d3 angles 0 == up
+  a = a - Math.PI / 2;
+  return [r * Math.cos(a), r * Math.sin(a)];
+}
+
+function overlaps(r1, r2) {
+  return (
+    r1.x < (r2.x + r2.width) &&
+    (r1.x + r1.width) > r2.x &&
+    r1.y < (r2.y + r2.height) &&
+    (r1.y + r1.height) > r2.y
+  );
+}
+
+function getPosition(a, w, h) {
+  var angle = (a + Math.PI / 4) % (Math.PI * 2);
+  if (angle < Math.PI / 2) {
+    return {
+      position: "top",
+      x: - w / 2,
+      y: -h
+    };
+  }
+  if (angle < Math.PI) {
+    return {
+      position: "right",
+      x: 0,
+      y: -h / 2
+    };
+  }
+  if (angle < Math.PI * 3 / 2) {
+    return {
+      position: "bottom",
+      x: - w / 2,
+      y: 0
+    };
+  }
+  return {
+    position: "left",
+    x: -w,
+    y: -h / 2
+  };
+}
+
 function currentChannel() {
   var r = d3.select("#channel-form [name=\"channel-selector\"]:checked").property("value");
   return r;
 }
 
-function map_entries(m) {
-  var l = [];
-  m.forEach(function(k, v) {
-    l.push({
-      _key: k,
-      _value: v
-    });
-  });
-  return l;
-};
+function measureText(t) {
+  return d3.select("#measurer").text(t).node().getComputedTextLength();
+}
+
 
 // This function doesn't accept normal d3 functions as values. It should be
 // refactored.
@@ -817,7 +857,35 @@ function buildLocale(channelData) {
       return d3.sum(vl, function(d) { return d.count; });
     });
   var locales = localeNest.map(channelData, d3.map);
+  // go back and summarize each locale
+  locales.forEach(function(locale, data) {
+    data.count = d3.sum(data.values());
+  });
   gLocales = locales;
+
+  var minPie = 0.005;
+
+  var mainLocalesData = [];
+  var other = 0;
+  locales.forEach(function(locale, data) {
+    var d = {
+      locale: locale,
+      count: d3.sum(data.values())
+    };
+    if (d.count / total < minPie) {
+      other += d.count;
+    }
+    else {
+      mainLocalesData.push(d);
+    }
+  });
+  mainLocalesData.sort(function(a, b) {
+    return d3.ascending(a.locale, b.locale);
+  });
+  mainLocalesData.push({
+    locale: "Other",
+    count: other
+  });
 
   var dims = new Dimensions({
     width: 400,
@@ -827,77 +895,122 @@ function buildLocale(channelData) {
     marginBottom: 5,
     marginRight: 5
   });
-  var color = d3.scale.category20c();
+  var color = d3.scale.category20();
   var svgg = d3.select("#bylocale-chart")
-    .text("").call(dims.setupSVG.bind(dims))
-    .append("g").call(dims.transformCenter.bind(dims));
+    .call(dims.setupSVG.bind(dims))
+    .select(".chart")
+    .call(dims.transformCenter.bind(dims));
 
-  var rscale = d3.scale.ordinal()
-    .range([10, 10, dims.radius() * .8, dims.radius()]).domain([0, 1, 2, 3]);
-
-  var partition = d3.layout.partition()
-    .children(function(d) {
-      if (d.value && d.value.entries) {
-        return d.value.entries();
-      }
-      return null;
-    })
-    .value(function(d) {
-      return d.value;
-    })
-    .sort(function(a, b) {
-      return d3.ascending(a.key, b.key);
-    })
-    .size([2 * Math.PI, 3]);
+  var pie = d3.layout.pie()
+    .sort(null)
+    .value(function(d) { return d.count; });
 
   var arc = d3.svg.arc()
-    .startAngle(function(d) { return d.x; })
-    .endAngle(function(d) { return d.x + d.dx; })
-    .innerRadius(function(d) {
-      return rscale(d.y);
-    })
-    .outerRadius(function(d) {
-      return rscale(d.y + 1);
+    .outerRadius(dims.radius() / 2).innerRadius(5);
+
+  var data = pie(mainLocalesData);
+  var arcg = svgg.selectAll(".arc")
+    .data(data, function(d) { return d.data.locale; });
+
+  arcg.enter()
+    .append("path").attr("class", "arc locale")
+    .attr("fill", function(d) {
+      if (d.data.locale == "Other") {
+        return "#888";
+      }
+      return color(d.data.locale);
+    });
+  arcg.exit().remove();
+  arcg.attr("d", arc);
+
+  function getPos(d) {
+    var r = dims.radius() / 2 + d.len + 4;
+    return polarToRect(r, d.angle);
+  }
+
+  function getBounds(d) {
+    var tl = measureText(d.data.locale);
+    var q = getPosition(d.angle, tl, gTextHeight);
+    var pos = getPos(d);
+    return {
+      x: pos[0] + q.x,
+      y: pos[1] + q.y,
+      width: tl,
+      height: gTextHeight
+    };
+  }
+
+  var labelLayout = [];
+  data.forEach(function(d) {
+    // strategies:
+    //   default
+    //   extend length
+    var newd = {
+      angle: (d.endAngle - d.startAngle) / 2 + d.startAngle,
+      len: 5,
+      data: d.data
+    };
+    function overlapsAny() {
+      var bounds = getBounds(newd);
+      return !labelLayout.every(function(prev) {
+        if (overlaps(prev.bounds, bounds)) {
+          return false;
+        }
+        return true;
+      });
+    }
+    while (overlapsAny()) {
+      newd.len += 1;
+    };
+    newd.bounds = getBounds(newd);
+    labelLayout.push(newd);
+  });
+  gLabelLayout = labelLayout;
+
+  var labels = svgg.selectAll(".arc-label")
+    .data(labelLayout, function(d) { return d.data.locale; });
+  var enter = labels.enter().append("g")
+    .attr("class", "arc-label");
+  enter.append("path");
+  enter.append("text")
+    .text(function(d) { return d.data.locale; });
+  labels.exit().remove();
+
+  labels.select("path")
+    .attr("d", function(d) {
+      return d3.svg.line()([
+        polarToRect(dims.radius() / 2, d.angle),
+        polarToRect(dims.radius() / 2 + d.len, d.angle)
+      ]);
+    });
+  labels.select("text")
+    .attr({
+      x: function(d) { return d.bounds.x; },
+      y: function(d) { return d.bounds.y; }
     });
 
-  var arcg = svgg.datum({value: locales}).selectAll(".arc")
-    .data(partition.nodes)
-    .enter().append("g");
-
-  arcg.append("path").attr("class", "arc")
-    .attr("d", arc)
-    .attr("stroke", function(d) {
-      if (d.depth == 2) {
-        return "rgba(0,0,100,0.5)";
-      }
-      return "rgba(255,255,255,0.4)";
-    })
-    .attr("fill", function(d) {
-      if (d.depth == 2) {
-        d = d.parent;
-      }
-      return color(d.key);
-    })
-    .attr("locale", function(d) {
-      var l = [];
-      while (d && d.key) {
-        l.unshift(d.key);
-        d = d.parent;
-      }
-      return l.join(":");
+  var bigEnough = locales.entries()
+    .filter(function(d) {
+      return d.value.count > 100;
     });
-  arcg.filter(function(d) { return d.depth == 1; })
-    .append("text").attr("class", "arc-label")
-    .attr("fill", function(d) {
-      var l = d3.hsl(color(d.key)).l;
-      return l > 0.5 ? "black" : "white";
-    })
-    .attr("transform", function(d) {
-      return "rotate(" + ((d.x + d.dx / 2) / Math.PI * 180 - 90) +")";
-    })
-    .attr("x", rscale(2) - 4)
+  bigEnough.sort(function(a, b) {
+    return b.value.count - a.value.count;
+  });
+  var tr = d3.select("#bylocale-legend tbody").selectAll("tr")
+    .data(bigEnough, function(d) { return d.key; });
+  tr.exit().remove();
+  enter = tr.enter().append("tr");
+  enter.append("td").attr("class", "legend-color")
+    .style("background-color", function(d) { return color(d.key); });
+  enter.append("td").attr("class", "legend-label")
     .text(function(d) {
       return d.key;
+    });
+  enter.append("td").attr("class", "legend-data");
+
+  tr.select(".legend-data")
+    .text(function(d) {
+      return d3.format(".3%")(d.value.count / total);
     });
 }
 
