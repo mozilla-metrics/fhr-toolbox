@@ -482,7 +482,7 @@ function setupUsers() {
     width: 500,
     height: 250,
     legendHeight: 60,
-    legendWidth: 200,
+    legendWidth: 250,
     marginTop: 10,
     marginBottom: 40,
     marginLeft: 80,
