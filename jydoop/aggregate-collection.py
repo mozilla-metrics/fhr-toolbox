@@ -19,14 +19,15 @@ channels grouped into the main channels.
 import healthreportutils
 from datetime import date, datetime, timedelta
 import os, shutil, csv
-from mrjob.job import MRJob
 import sys, codecs
 
 import mrjob
+import tempfile
 
-sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
-#sys.stdin = codecs.getreader('utf-8')(sys.stdin)
-
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 # How many days must a user be gone to be considered "lost"?
 LOSS_DAYS = 7 * 6 # 42 days/one release cycle
@@ -188,15 +189,34 @@ def reduce(job, k, vlist):
     else:
         yield(k, sum(vlist))
 
-class AggJob(MRJob):
+class AggJob(mrjob.MRJob):
     HADOOP_INPUT_FORMAT="org.apache.hadoop.mapred.SequenceFileAsTextInputFormat"
     INPUT_PROTOCOL = mrjob.protocol.RawProtocol
+
+    def run_job(self):
+        self.stdout = tempfile.TemporaryFile()
+
+        if self.options.start_date is None:
+            raise Exception("--start-date is required")
+        # validate the start date here
+        start_date(self.options.start_date)
+
+        # Do the big work
+        super(AggJob, self).run_job()
+
+        # Produce the separated output files
+        outpath = self.options.output_path
+        if outpath is None:
+            outpath = os.path.expanduser("~/fhr-aggregates-" + self.options.start_date)
+        output(self.stdout, outpath)
 
     def configure_options(self):
         super(AggJob, self).configure_options()
 
-        self.add_passthrough_option('--start-date', help = "Specify start date",
-                                    default = datetime.now().strftime("%Y-%m-%d"))
+        self.add_passthrough_option('--output-path', help="Specify output path",
+                                    default=None)
+        self.add_passthrough_option('--start-date', help="Specify start date",
+                                    default=None)
 
     def mapper(self, key, value):
         return map(self, key, value)
@@ -205,6 +225,53 @@ class AggJob(MRJob):
         return reduce(self, key, vlist)
 
     combiner = reducer
+
+def getresults(fd):
+    fd.seek(0)
+    for line in fd:
+        k, v = line.split("\t")
+        yield json.loads(k), json.loads(v)
+
+def unwrap(l, v):
+    """
+    Unwrap a value into a list. Dicts are added in their repr form.
+    """
+    if isinstance(v, (tuple, list)):
+        for e in v:
+            unwrap(l, e)
+    elif isinstance(v, dict):
+        l.append(repr(v))
+    elif isinstance(v, unicode):
+        l.append(v.encode("utf-8"))
+    else:
+        l.append(v)
+
+def output(fd, path):
+    try:
+        shutil.rmtree(path)
+    except OSError:
+        pass
+    os.mkdir(path)
+
+    writers = {}
+    errs = codecs.getwriter("utf-8")(open(os.path.join(path, "errors.txt"), "w"))
+    for k, v in getresults(fd):
+        if k == "exception":
+            print >>errs, "==ERR=="
+            print >>errs, v[0]
+            print >>errs, v[1]
+            continue
+        l = []
+        unwrap(l, k)
+        unwrap(l, v)
+        fname = l.pop(0)
+        if fname in writers:
+            w = writers[fname]
+        else:
+            fd = open(os.path.join(path, fname + ".csv"), "w")
+            w = csv.writer(fd)
+            writers[fname] = w
+        w.writerow(l)
 
 if __name__ == '__main__':
     AggJob.run()
