@@ -51,7 +51,9 @@ def start_date(dstr):
     Start measuring a few days before the snapshot was taken to give clients
     time to upload.
     """
-    return datetime.strptime(dstr, "%Y-%m-%d").date() - timedelta(days=2)
+    snapshot = datetime.strptime(dstr, "%Y-%m-%d").date()
+    startdate = last_saturday(snapshot) - timedelta(days=7)
+    return startdate
 
 def date_back(start, days):
     """iter backwards from start for N days"""
@@ -79,6 +81,12 @@ def logexceptions(func):
 @logexceptions
 @healthreportutils.FHRMapper()
 def map(job, key, payload):
+    errors = payload.get("errors", [])
+    notInitialized = payload.get("notInitialized", 0)
+    for err in errors:
+        yield (("error", err), 1)
+    yield (("totals", notInitialized, len(errors)), 1)
+
     channel = payload.channel.split("-")[0]
     if channel not in main_channels:
         return
@@ -90,6 +98,7 @@ def map(job, key, payload):
 
     first_active = None
     last_info = None
+    last_update = None
 
     sd = start_date(job.options.start_date)
     for d in date_back(sd, LOSS_DAYS):
@@ -98,6 +107,8 @@ def map(job, key, payload):
             first_active = d
             if not last_info and "org.mozilla.appInfo.appinfo" in day:
                 last_info = day
+            if not last_update and "org.mozilla.appInfo.update" in day:
+                last_update = day
 
     if first_active:
         # Discern active/new/returning
@@ -138,7 +149,7 @@ def map(job, key, payload):
         yield(("days", channel, ending.strftime("%Y-%m-%d"), days), 1)
         yield(("ticks", channel, ending.strftime("%Y-%m-%d"), hours), 1)
 
-    week_end = last_saturday(sd)
+    week_end = sd # sd is always a Saturday
     for n in xrange(0, 4):
         write_week(week_end - timedelta(days=7 * n))
 
@@ -169,13 +180,15 @@ def map(job, key, payload):
     # everything else
     if not last_info:
         last_info = {}
+    if not last_update:
+        last_update = {}
 
     version = payload.get("geckoAppInfo", {}).get("version", "?")
     locale = payload.last.get("org.mozilla.appInfo.appinfo", {}).get("locale", "?")
     default_browser = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isDefaultBrowser", "?")
     telemetry = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isTelemetryEnabled", "?")
-    update_auto = last_info.get("org.mozilla.appInfo.update", {}).get("autoDownload", "?")
-    update_enabled = last_info.get("org.mozilla.appInfo.update", {}).get("enabled", "?")
+    update_auto = last_update.get("org.mozilla.appInfo.update", {}).get("autoDownload", "?")
+    update_enabled = last_update.get("org.mozilla.appInfo.update", {}).get("enabled", "?")
     geo = payload.get("geoCountry", "?")
 
     yield(("stats", channel, version, locale, default_browser, telemetry,
@@ -254,7 +267,7 @@ def output(fd, path):
     os.mkdir(path)
 
     writers = {}
-    errs = codecs.getwriter("utf-8")(open(os.path.join(path, "errors.txt"), "w"))
+    errs = codecs.getwriter("utf-8")(open(os.path.join(path, "exceptions.txt"), "w"))
     for k, v in getresults(fd):
         if k == "exception":
             print >>errs, "==ERR=="
