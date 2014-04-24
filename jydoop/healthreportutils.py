@@ -15,10 +15,14 @@
 """Utilities for querying Firefox Health Report data using jydoop."""
 
 import datetime
-import json
-
 from collections import namedtuple
 
+try:
+    import simplejson as json
+except:
+    import json
+
+import sys
 
 SessionInfo = namedtuple('SessionInfo', ('total', 'clean', 'active_ticks'))
 
@@ -294,32 +298,6 @@ class FHRPayload(object):
 def base_setup(job):
     job.getConfiguration().set("mapred.job.queue.name", "research")
 
-def setup_full_scan(job, args):
-    """
-    Set up a job to run full table scans for FHR data.
-
-    We don't expect any arguments.
-    """
-
-    base_setup(job)
-
-    import org.apache.hadoop.hbase.client.Scan as Scan
-    import com.mozilla.hadoop.hbase.mapreduce.MultiScanTableMapReduceUtil as MSTMRU
-
-    scan = Scan()
-    scan.setCaching(500)
-    scan.setCacheBlocks(False)
-    scan.addColumn(bytearray('data'), bytearray('json'))
-
-    # FIXME: do it without this multi-scan util
-    scans = [scan]
-    MSTMRU.initMultiScanTableMapperJob(
-        'metrics', scans,
-        None, None, None, job)
-
-    # inform HadoopDriver about the columns we expect to receive
-    job.getConfiguration().set("org.mozilla.jydoop.hbasecolumns", "data:json");
-
 known_sequences = {
     '1pct': '/user/sguha/fhr/samples/output/1pct',
     '5pct': '/user/sguha/fhr/samples/output/5pct',
@@ -327,30 +305,6 @@ known_sequences = {
     'aurora': '/user/sguha/fhr/samples/output/aurora',
     'beta': '/user/sguha/fhr/samples/output/beta',
 }
-
-def setup_sequence_scan(job, args):
-    """
-    Set up a job which runs on precomputed sequence files. These are
-    de-orphaned subsets of the full document store which are either samples
-    or subsets of particular channels.
-
-    You can specify a sample type by name or by full path.
-    """
-
-    from org.apache.hadoop.mapreduce.lib.input import FileInputFormat, SequenceFileAsTextInputFormat
-
-    path, = args
-    if path in known_sequences:
-        path = known_sequences[path]
-
-    if not path.startswith('/'):
-        raise ValueError("Invalid sequence path")
-
-    base_setup(job)
-
-    job.setInputFormatClass(SequenceFileAsTextInputFormat)
-    FileInputFormat.setInputPaths(job, path)
-    job.getConfiguration().set("org.mozilla.jydoop.mappertype", "TEXT")
 
 class FHRMapper(object):
     """Decorator used to annotate a Firefox Health Report mapping function.
@@ -376,7 +330,7 @@ class FHRMapper(object):
         self.today = datetime.date.today()
 
     def __call__(self, func):
-        def wrapper(key, value, context):
+        def wrapper(job, key, value):
             try:
                 payload = FHRPayload(value)
             except HealthReportError:
@@ -395,7 +349,7 @@ class FHRMapper(object):
                 if age.days > self.max_day_age:
                     return
 
-            func(key, payload, context)
+            for k1, v1 in func(job, key, payload):
+                yield(k1, v1)
 
         return wrapper
-

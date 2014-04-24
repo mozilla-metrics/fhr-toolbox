@@ -16,10 +16,18 @@ All data separated by channel and filtered for the main channels. Partner
 channels grouped into the main channels.
 """
 
-import jydoop
 import healthreportutils
 from datetime import date, datetime, timedelta
 import os, shutil, csv
+import sys, codecs
+
+import mrjob
+import tempfile
+
+try:
+    import simplejson as json
+except ImportError:
+    import json
 
 # How many days must a user be gone to be considered "lost"?
 LOSS_DAYS = 7 * 6 # 42 days/one release cycle
@@ -33,13 +41,6 @@ main_channels = (
 )
 
 date_key = "org.mozilla.fhrtoolbox.snapshotdate"
-
-def setupjob(job, args):
-    inputdata, date = args
-    start_date(date) # validate
-    job.getConfiguration().set(date_key, date)
-    healthreportutils.setup_sequence_scan(job, [inputdata])
-
 def last_saturday(d):
     """Return the Saturday on or before the date."""
     # .weekday in python starts on 0=Monday
@@ -50,7 +51,9 @@ def start_date(dstr):
     Start measuring a few days before the snapshot was taken to give clients
     time to upload.
     """
-    return datetime.strptime(dstr, "%Y-%m-%d").date() - timedelta(days=2)
+    snapshot = datetime.strptime(dstr, "%Y-%m-%d").date()
+    startdate = last_saturday(snapshot) - timedelta(days=7)
+    return startdate
 
 def date_back(start, days):
     """iter backwards from start for N days"""
@@ -64,18 +67,26 @@ def active_day(day):
     return any(k != "org.mozilla.crashes.crashes" for k in day)
 
 def logexceptions(func):
-    def wrapper(k, v, context):
+    def wrapper(job, k, v):
         try:
-            context.write("size", len(v))
-            context.write(("bucketsize", len(v) / 1000), 1)
-            func(k, v, context)
+            yield("size", len(v))
+            yield(("bucketsize", len(v) / 1000), 1)
+
+            for k1, v1 in func(job, k, v):
+                yield(k1, v1)
         except Exception as e:
-            context.write("exception", (str(e), v))
+            yield("exception", (str(e), v))
     return wrapper
 
 @logexceptions
 @healthreportutils.FHRMapper()
-def map(key, payload, context):
+def map(job, key, payload):
+    errors = payload.get("errors", [])
+    notInitialized = payload.get("notInitialized", 0)
+    for err in errors:
+        yield (("error", err), 1)
+    yield (("totals", notInitialized, len(errors)), 1)
+
     channel = payload.channel.split("-")[0]
     if channel not in main_channels:
         return
@@ -87,32 +98,35 @@ def map(key, payload, context):
 
     first_active = None
     last_info = None
+    last_update = None
 
-    sd = start_date(context.getConfiguration().get(date_key))
+    sd = start_date(job.options.start_date)
     for d in date_back(sd, LOSS_DAYS):
         day = get_day(d)
         if active_day(day):
             first_active = d
             if not last_info and "org.mozilla.appInfo.appinfo" in day:
                 last_info = day
+            if not last_update and "org.mozilla.appInfo.update" in day:
+                last_update = day
 
     if first_active:
         # Discern active/new/returning
         for d in date_back(first_active - timedelta(days=1), LOSS_DAYS):
             if active_day(get_day(d)):
-                context.write(("users", channel, "active", ""), 1)
+                yield(("users", channel, "active", ""), 1)
                 break
         else:
             for d in date_back(first_active - timedelta(LOSS_DAYS + 1), TOTAL_DAYS):
                 if active_day(get_day(d)):
-                    context.write(("users", channel, "return", first_active.strftime("%Y-%m-%d")), 1)
+                    yield(("users", channel, "return", first_active.strftime("%Y-%m-%d")), 1)
                     break
             else:
-                context.write(("users", channel, "new", first_active.strftime("%Y-%m-%d")), 1)
+                yield(("users", channel, "new", first_active.strftime("%Y-%m-%d")), 1)
     else:
         for d in date_back(sd - timedelta(days=LOSS_DAYS), LOSS_DAYS):
             if active_day(get_day(d)):
-                context.write(("users", channel, "lost", d.strftime("%Y-%m-%d")), 1)
+                yield(("users", channel, "lost", d.strftime("%Y-%m-%d")), 1)
                 break
         return # no other stats if user wasn't active
 
@@ -132,10 +146,10 @@ def map(key, payload, context):
 
         # bucket ticks by hour
         hours = int(round(ticks * 5 / 60 / 60, 1))
-        context.write(("days", channel, ending.strftime("%Y-%m-%d"), days), 1)
-        context.write(("ticks", channel, ending.strftime("%Y-%m-%d"), hours), 1)
+        yield(("days", channel, ending.strftime("%Y-%m-%d"), days), 1)
+        yield(("ticks", channel, ending.strftime("%Y-%m-%d"), hours), 1)
 
-    week_end = last_saturday(sd)
+    week_end = sd # sd is always a Saturday
     for n in xrange(0, 4):
         write_week(week_end - timedelta(days=7 * n))
 
@@ -146,7 +160,7 @@ def map(key, payload, context):
         for addonid, data in addons.items():
             if addonid == "_v":
                 continue
-            context.write(("addons", channel, addonid,
+            yield(("addons", channel, addonid,
                            data.get("userDisabled", "?"),
                            data.get("appDisabled", "?"),
                            data.get("name", "?")), 1)
@@ -157,7 +171,7 @@ def map(key, payload, context):
         for pluginid, data in plugins.items():
             if pluginid == "_v":
                 continue
-            context.write(("plugins", channel,
+            yield(("plugins", channel,
                            data.get("name", "?"),
                            data.get("blocklisted", "?"),
                            data.get("disabled", "?"),
@@ -166,28 +180,86 @@ def map(key, payload, context):
     # everything else
     if not last_info:
         last_info = {}
+    if not last_update:
+        last_update = {}
 
     version = payload.get("geckoAppInfo", {}).get("version", "?")
     locale = payload.last.get("org.mozilla.appInfo.appinfo", {}).get("locale", "?")
     default_browser = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isDefaultBrowser", "?")
     telemetry = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isTelemetryEnabled", "?")
-    update_auto = last_info.get("org.mozilla.appInfo.update", {}).get("autoDownload", "?")
-    update_enabled = last_info.get("org.mozilla.appInfo.update", {}).get("enabled", "?")
+    update_auto = last_update.get("org.mozilla.appInfo.update", {}).get("autoDownload", "?")
+    update_enabled = last_update.get("org.mozilla.appInfo.update", {}).get("enabled", "?")
     geo = payload.get("geoCountry", "?")
 
-    context.write(("stats", channel, version, locale, default_browser, telemetry,
+    yield(("stats", channel, version, locale, default_browser, telemetry,
                    update_auto, update_enabled, geo, addons_v), 1)
 
-def reduce(k, vlist, cx):
+def reduce(job, k, vlist):
     if k == "exception":
+        print >> sys.stderr, "FOUND exception", vlist
         for v in vlist:
-            cx.write(k, v)
+            yield(k, v)
     else:
-        cx.write(k, sum(vlist))
+        yield(k, sum(vlist))
 
-combine = reduce
+class AggJob(mrjob.MRJob):
+    HADOOP_INPUT_FORMAT="org.apache.hadoop.mapred.SequenceFileAsTextInputFormat"
+    INPUT_PROTOCOL = mrjob.protocol.RawProtocol
 
-def output(path, results):
+    def run_job(self):
+        self.stdout = tempfile.TemporaryFile()
+
+        if self.options.start_date is None:
+            raise Exception("--start-date is required")
+        # validate the start date here
+        start_date(self.options.start_date)
+
+        # Do the big work
+        super(AggJob, self).run_job()
+
+        # Produce the separated output files
+        outpath = self.options.output_path
+        if outpath is None:
+            outpath = os.path.expanduser("~/fhr-aggregates-" + self.options.start_date)
+        output(self.stdout, outpath)
+
+    def configure_options(self):
+        super(AggJob, self).configure_options()
+
+        self.add_passthrough_option('--output-path', help="Specify output path",
+                                    default=None)
+        self.add_passthrough_option('--start-date', help="Specify start date",
+                                    default=None)
+
+    def mapper(self, key, value):
+        return map(self, key, value)
+
+    def reducer(self, key, vlist):
+        return reduce(self, key, vlist)
+
+    combiner = reducer
+
+def getresults(fd):
+    fd.seek(0)
+    for line in fd:
+        k, v = line.split("\t")
+        yield json.loads(k), json.loads(v)
+
+def unwrap(l, v):
+    """
+    Unwrap a value into a list. Dicts are added in their repr form.
+    """
+    if isinstance(v, (tuple, list)):
+        for e in v:
+            unwrap(l, e)
+    elif isinstance(v, dict):
+        l.append(repr(v))
+    elif isinstance(v, unicode):
+        l.append(v.encode("utf-8"))
+    else:
+        l.append(v)
+
+def output(fd, path):
     try:
         shutil.rmtree(path)
     except OSError:
@@ -195,16 +267,16 @@ def output(path, results):
     os.mkdir(path)
 
     writers = {}
-    errs = open(os.path.join(path, "errors.txt"), "w")
-    for k, v in results: 
+    errs = codecs.getwriter("utf-8")(open(os.path.join(path, "exceptions.txt"), "w"))
+    for k, v in getresults(fd):
         if k == "exception":
             print >>errs, "==ERR=="
             print >>errs, v[0]
             print >>errs, v[1]
             continue
         l = []
-        jydoop.unwrap(l, k)
-        jydoop.unwrap(l, v)
+        unwrap(l, k)
+        unwrap(l, v)
         fname = l.pop(0)
         if fname in writers:
             w = writers[fname]
@@ -214,17 +286,5 @@ def output(path, results):
             writers[fname] = w
         w.writerow(l)
 
-import sys
-if len(sys.argv) > 1 and sys.argv[1] == "unittest":
-    f, date, out = sys.argv[2:]
-    data = open(f).read()
-    vlist = []
-    class DumpContext(object):
-        def getConfiguration(self):
-            return { date_key: date }
-
-        def write(self, k, v):
-            vlist.append((k, v))
-
-    map("foobar", data, DumpContext())
-    output(out, vlist)
+if __name__ == '__main__':
+    AggJob.run()
