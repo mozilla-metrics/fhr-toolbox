@@ -5,8 +5,6 @@ var gTextHeight = 15;
 
 var gSample = 0.05;
 
-var DATA_URL = "data";
-
 var channelNest = d3.nest()
   .key(function (d) { return d.channel; });
 
@@ -134,25 +132,35 @@ Dimensions.prototype.setupSVG = function(e) {
   });
 };
 
+function getBaseURL() {
+  var d = d3.select("#channel-form [name=\"date-selector\"]:checked").property("value");
+  console.log("baseURL", d);
+  return d;
+}
+
 function fetchDays() {
-  d3.xhr(DATA_URL + "/days.csv", "text/plain")
+  d3.xhr(getBaseURL() + "/days.csv", "text/plain")
     .get()
     .on("load",
       function(t) {
         gDays = channelNest.map(d3.csv.parseRows(t.responseText,
           function(d, i) {
+            if (d.length == 4) {
+              d.splice(1, 0, "unknown");
+            }
             return {
               channel: d[0],
-              weekend: d[1],
-              days: numeric(d[2]),
-              count: numeric(d[3]) / gSample
+              version: d[1],
+              weekend: d[2],
+              days: numeric(d[3]),
+              count: numeric(d[4]) / gSample
             };
           }), d3.map);
         setupDays();
       })
     .on("error",
       function(a1, a2) {
-        console.error(e);
+        console.error(a1, a2);
         alert("Error fetching days.csv: " + e);
       });
 }
@@ -167,7 +175,10 @@ function setupDays() {
     .rollup(function(week) {
       var l = [];
       week.forEach(function(day) {
-        l[day.days] = day.count;
+        if (l[day.days] === undefined) {
+          l[day.days] = 0;
+        }
+        l[day.days] += day.count;
       });
       return l;
     });
@@ -227,7 +238,7 @@ function setupDays() {
     width: 80,
     height: 250,
     marginTop: 5,
-    marginLeft: 50,
+    marginLeft: 85,
     marginRight: 15,
     marginBottom: 130
   });
@@ -338,7 +349,7 @@ function setupDays() {
 }
 
 function fetchUsers() {
-  d3.xhr(DATA_URL + "/users.csv", "text/plain")
+  d3.xhr(getBaseURL() + "/users.csv", "text/plain")
     .get()
     .on("load",
       function(t) {
@@ -643,7 +654,7 @@ function setupUsers() {
 }
 
 function fetchStats() {
-  d3.xhr(DATA_URL + "/stats.csv", "text/plain")
+  d3.xhr(getBaseURL() + "/stats.csv", "text/plain")
     .get()
     .on("load",
       function(t) {
@@ -1014,13 +1025,19 @@ function buildLocale(channelData) {
     });
 }
 
-d3.select("#channel-form").on("change",
+d3.selectAll("#channel-form [name=\"channel-selector\"]").on("change",
   function() {
     setupDays();
     setupUsers();
     setupStats();
   });
 
-fetchDays();
-fetchUsers();
-fetchStats();
+d3.selectAll("#channel-form [name=\"date-selector\"]").on("change", fetch);
+
+function fetch() {
+  console.log("fetch()");
+  fetchDays();
+  fetchUsers();
+  fetchStats();
+}
+fetch();

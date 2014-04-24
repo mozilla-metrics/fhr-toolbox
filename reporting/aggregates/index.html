@@ -18,7 +18,11 @@
     </ul>
 
   <form id="channel-form">
-    Select a release channel:
+    <p>Select a snapshot date:
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-03-16" id="date-2014-03-16"><label for="date-2014-03-16">2014-03-16</label></span>
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-14" id="date-2014-04-14" checked><label for="date-2014-04-14">2014-04-14</label></span>
+
+    <p>Select a release channel:
     <span class="channel-span"><input type="radio" name="channel-selector" value="release" id="channel-release" checked><label for="channel-release">Release</label></span>
     <span class="channel-span"><input type="radio" name="channel-selector" value="beta" id="channel-beta"><label for="channel-beta">Beta</label></span>
     <span class="channel-span"><input type="radio" name="channel-selector" value="aurora" id="channel-aurora"><label for="channel-aurora">Aurora</label></span>

@@ -116,14 +116,14 @@ section {
 @media screen and (min-width: 500px) {
 
 body {
-  padding-right: 112px;
+  padding-right: 152px;
 }
 
 #channel-form {
   position: fixed;
   right: 2px;
   top: 2px;
-  width: 100px;
+  width: 140px;
   border: 1px solid #CCC;
   padding: 4px;
 }
