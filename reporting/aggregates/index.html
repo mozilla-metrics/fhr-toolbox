@@ -8,10 +8,11 @@
 
   <p>General notes:
     <ul>
-      <li>FHR data isn't necessarily uploaded immediately, but we don't know
-        the extent of any lag. This report time-delays its findings
-        by four days, but the data in the most recent week may be lower
-        due to undercounting.
+      <li>FHR data isn't uploaded immediately. We don't know
+        how much lag there is, but the short-term dropoff in recent weeks
+        doesn't match up with longer-term historical data.
+        This report delays analysis by eight days, but I have serious concerns
+        that lag might be as much as five weeks behind.
       <li>This data comes from a heuristically de-orphaned data set, but
         it is possible that we are both under- and over-counting some
         profiles because of data issues.
@@ -30,19 +31,27 @@
   </form>
 
   <div>
-    <section id="users" class="narrow">
+    <section id="users">
       <h2>Active Profiles per Week</h2>
+
+      <p>Number of users active at any point in a given <abbr title="Sunday-Saturday">week</abbr>:
+      <p>
       <svg></svg>
     </section>
-    <section id="usage" class="narrow">
-      <h2>Usage Days per Week</h2>
-      <svg></svg>
+
+    <section id="usage">
+      <h2>Usage Days</h2>
+
+      <p>Total active days per week:
+
+      <p>
+        <svg id="activeDays"></svg>
+
+      <p>Distribution of users by how many days per week they used Firefox last week:
+
+      <p>
+        <svg id="activeDistribution"></svg>
     </section>
-    <div id="usersLegend">
-      <p>Usage days per week:</p>
-      <ol id="usersLegendList">
-      </ol>
-    </div>
   </div>
 
   <section id="retention">
@@ -119,6 +128,55 @@
     <svg id="bygeo-chart"></svg>
   </section>
 
+  <section id="addons">
+    <h2>Addons</h2>
+
+    <h3>Most Popular Active Addons (by addon ID)</h3>
+    <table id="activeAddonsById" class="data">
+      <thead>
+        <tr>
+          <td>ID
+          <td>Name
+          <td>Active %
+      <tbody>
+    </table>
+
+    <h3>Most-Disabled Addons (by addon ID)</h3>
+    <table id="disabledById" class="data">
+      <thead>
+        <tr>
+          <td>ID
+          <td>Name
+          <td>userDisabled
+      <tbody>
+    </table>
+
+    <h3>Addons Names With Varying Addon IDs</h3>
+    <table id="addonMultiIDs" class="data">
+      <thead>
+        <tr>
+          <td>Name
+          <td>IDs
+          <td>Total Install %
+      <tbody>
+    </table>
+  </section>
+
+  <section id="lag">
+    <h2>Lag</h2>
+
+    <p>Distribution of "thisPingDate" from profiles in this snapshot. The green
+      dotted line shows what a constant profile-drop rate of
+      <span id="dropRate">N</span> per day would be.
+    <p><svg id="lagChart"></svg>
+
+    <p>Assuming the constant profile-loss rate, how many FHR profiles will be
+      up to date looking backwards in history from an FHR snapshot?
+
+
+    <p><svg id="lagDays"></svg>
+  </section>
+
   <section>
     <h2>Things To Do</h2>
 
@@ -135,8 +193,9 @@
 
     <ul>
       <li><a href="https://github.com/bsmedberg/fhr-toolbox/blob/master/jydoop/aggregate-collection.py">Data aggregation script</a> (uses <a href="https://github.com/mozilla/jydoop/">jydoop</a>)</li>
-      <li><a href="https://github.com/bsmedberg/fhr-toolbox/tree/aggregate-processor/reporting/aggregates">This dashboard</a>
+      <li><a href="https://github.com/bsmedberg/fhr-toolbox/tree/master/reporting/aggregates">This dashboard</a>
     </ul>
+  </section>
 
   <script src="d3.v3.min.js"></script>
   <script src="index.js"></script>

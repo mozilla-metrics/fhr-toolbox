@@ -1,4 +1,4 @@
-var gDays, gUsers, gStats;
+var gDays, gUsers, gStats, gAddons, gLag;
 
 var MS_PER_DAY = 1000 * 60 * 60 * 24;
 var gTextHeight = 15;
@@ -14,6 +14,26 @@ function sorted(l, comp) {
   return l;
 }
 
+if (!Element.prototype.matches) {
+  Element.prototype.matches =
+    Element.prototype.mozMatchesSelector ||
+    Element.prototype.webkitMatchesSelector ||
+    Element.prototype.msMatchesSelector ||
+    undefined;
+}
+
+function closest(el, selector) {
+  while (el) {
+    if (el.matches(selector)) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+var commaFormat = d3.format(",d");
+
 function triStateText(d) {
   switch (d) {
     case "1":
@@ -22,6 +42,27 @@ function triStateText(d) {
       return "No";
     }
   return "Unknown";
+}
+
+function tristateBool(d) {
+  switch (d) {
+    case "True":
+    case "1":
+      return true;
+    case "False":
+    case "0":
+      return false;
+    case "?":
+      return undefined;
+  }
+  throw Error("Unexpected tri-state value: " + d);
+}
+
+var gEventPoint = d3.select("svg").node().createSVGPoint();
+function eventPoint(event, el) {
+  gEventPoint.x = event.clientX;
+  gEventPoint.y = event.clientY;
+  return gEventPoint.matrixTransform(el.getScreenCTM().inverse());
 }
 
 function dateAdd(d, ms) {
@@ -132,10 +173,12 @@ Dimensions.prototype.setupSVG = function(e) {
   });
 };
 
+function getTargetDate() {
+  return d3.select("#channel-form [name=\"date-selector\"]:checked").property("value");
+}
+
 function getBaseURL() {
-  var d = d3.select("#channel-form [name=\"date-selector\"]:checked").property("value");
-  console.log("baseURL", d);
-  return d;
+  return getTargetDate();
 }
 
 function fetchDays() {
@@ -159,8 +202,7 @@ function fetchDays() {
         setupDays();
       })
     .on("error",
-      function(a1, a2) {
-        console.error(a1, a2);
+      function(e) {
         alert("Error fetching days.csv: " + e);
       });
 }
@@ -169,70 +211,24 @@ function setupDays() {
   if (!gDays) {
     return;
   }
-  var dayNest = d3.nest()
+  var activeNest = d3.nest()
     .key(function(d) { return d.weekend; })
-    .sortKeys(d3.descending)
-    .rollup(function(week) {
-      var l = [];
-      week.forEach(function(day) {
-        if (l[day.days] === undefined) {
-          l[day.days] = 0;
-        }
-        l[day.days] += day.count;
-      });
-      return l;
-    });
-  var byweek = dayNest.map(gDays.get(currentChannel()), d3.map);
+    .rollup(function(dlist) {
+      var active = d3.sum(dlist, function(d) { return d.days == 0 ? 0 : d.count; });
+      var days = d3.sum(dlist, function(d) { return d.count * d.days; });
+      return {
+        active: active,
+        activeDays: days
+      };
+    })
+    .sortKeys(d3.ascending);
 
-  var maxUsers = 0;
-  var maxUserDays = 0;
+  var activeByWeek = activeNest.entries(gDays.get(currentChannel()));
+  gActiveByWeek = activeByWeek;
+  var saturdays = activeByWeek.map(function(d) { return d.key; });
 
-  var data = [];
-
-  var saturdays = sorted(byweek.keys(), d3.descending);
-  saturdays.forEach(function(saturday) {
-    var week = byweek.get(saturday);
-
-    var users = 0;
-    var userDays = 0;
-
-    var weekdata = {
-      saturday: saturday,
-      users: [],
-    };
-    data.push(weekdata);
-
-    for (var i = 1; i <= 7; ++i) {
-      var count = week[i];
-      if (count === undefined) {
-        count = 0;
-      }
-      weekdata.users.push({
-        n: i,
-        users0: users,
-        users1: users + count,
-        days0: userDays,
-        days1: userDays + count * i
-      });
-      users += count;
-      userDays += count * i;
-    }
-    if (users > maxUsers) {
-      maxUsers = users;
-    }
-    if (userDays > maxUserDays) {
-      maxUserDays = userDays;
-    }
-  });
-
-  var colors = ["#98abc5", "#8a89a6", "#7b6888", "#6b486b", "#a05d56", "#d0743c", "#ff8c00"];
-  var legend = d3.select("#usersLegendList").text("");
-  for (var i = colors.length - 1; i >= 0; --i) {
-    legend.append("li").style("background-color", colors[i]).text(i + 1);
-  }
-
-  var color = d3.scale.ordinal()
-    .range(colors).domain([1, 2, 3, 4, 5, 6, 7]);
+  var maxActive = d3.max(activeByWeek, function(d) { return d.values.active; });
+  var maxActiveDays = d3.max(activeByWeek, function(d) { return d.values.activeDays; });
 
   var dims = new Dimensions({
     width: 80,
@@ -244,11 +240,11 @@ function setupDays() {
   });
 
   var x = d3.scale.ordinal()
-    .rangeRoundBands([dims.width, 0], 0.2)
+    .rangeRoundBands([0, dims.width], 0.2)
     .domain(saturdays);
   var y = d3.scale.linear()
     .rangeRound([0, dims.height])
-    .domain([maxUsers * 1.1, 0]);
+    .domain([maxActive * 1.1, 0]);
 
   var yAxis = d3.svg.axis()
     .scale(y)
@@ -284,26 +280,35 @@ function setupDays() {
     .attr("text-anchor", "middle")
     .text("Week Ending");
 
+  var t = d3.transform();
+  t.translate = [-dims.marginLeft + 15, dims.height / 2];
+  t.rotate = -90;
+  svgg.append("text")
+    .attr("transform", t.toString())
+    .attr("text-anchor", "middle")
+    .text("Active Profiles");
 
-  var bar = svgg.selectAll(".bar")
-    .data(data)
-    .enter()
-    .append("g")
-    .attr("transform", function(d) { return "translate(" + x(d.saturday) + ",0)"; });
+  var line = d3.svg.line()
+    .x(function(d) { return x(d.key); })
+    .y(function(d) { return y(d.values.active); });
 
-  bar.selectAll("rect")
-    .data(function(d) { return d.users; })
+  svgg.append("path")
+    .datum(activeByWeek)
+    .attr("class", "line main")
+    .attr("d", line);
+  var points = svgg.selectAll(".point")
+    .data(activeByWeek)
     .enter()
-    .append("rect")
-    .attr("class", "bar")
-    .attr("width", x.rangeBand())
-    .attr("y", function(d) { return y(d.users1); })
-    .attr("height", function(d) { return y(d.users0) - y(d.users1); })
-    .attr("fill", function(d) { return color(d.n); });
+    .append("circle")
+    .attr("class", "point main")
+    .attr("cx", function(d) { return x(d.key); })
+    .attr("cy", function(d) { return y(d.values.active); })
+    .attr("r", 3)
+    .attr("title", function(d) { return commaFormat(d.values.active); });
 
   y = d3.scale.linear()
     .rangeRound([0, dims.height])
-    .domain([maxUserDays * 1.1, 0]);
+    .domain([maxActiveDays * 1.1, 0]);
 
   yAxis = d3.svg.axis()
     .scale(y)
@@ -311,7 +316,7 @@ function setupDays() {
     .ticks(5)
     .tickFormat(d3.format("s"));
 
-  svgg = d3.select("#usage svg")
+  svgg = d3.select("#activeDays")
     .text("")
     .call(dims.setupSVG.bind(dims))
     .append("g")
@@ -330,22 +335,98 @@ function setupDays() {
   svgg.append("g")
     .attr("class", "y axis")
     .call(yAxis);
+  svgg.append("text")
+    .attr("y", dims.height + dims.marginBottom - 5)
+    .attr("x", dims.width / 2)
+    .attr("text-anchor", "middle")
+    .text("Week Ending");
 
-  bar = svgg.selectAll(".bar")
-    .data(data)
+  t = d3.transform();
+  t.translate = [-dims.marginLeft + 15, dims.height / 2];
+  t.rotate = -90;
+  svgg.append("text")
+    .attr("transform", t.toString())
+    .attr("text-anchor", "middle")
+    .text("Active Profile-Days");
+
+  line = d3.svg.line()
+    .x(function(d) { return x(d.key); })
+    .y(function(d) { return y(d.values.activeDays); });
+
+  svgg.append("path")
+    .datum(activeByWeek)
+    .attr("class", "line main")
+    .attr("d", line);
+  points = svgg.selectAll(".point")
+    .data(activeByWeek)
     .enter()
-    .append("g")
-    .attr("transform", function(d) { return "translate(" + x(d.saturday) + ",0)"; });
+    .append("circle")
+    .attr("class", "point main")
+    .attr("cx", function(d) { return x(d.key); })
+    .attr("cy", function(d) { return y(d.values.activeDays); })
+    .attr("r", 3)
+    .attr("title", function(d) { return commaFormat(d.values.activeDays); });
 
-  bar.selectAll("rect")
-    .data(function(d) { return d.users; })
+  var lastWeek = saturdays[saturdays.length - 1];
+  var activeDistribution = d3.nest()
+    .key(function(d) { return d.days; })
+    .rollup(function(dlist) {
+       return d3.sum(dlist, function(d) { return d.days == 0 ? 0 : d.count; });
+    })
+    .sortKeys(function(a, b) { return d3.descending(parseInt(a), parseInt(b)); })
+    .entries(gDays.get(currentChannel()).filter(function(d) { return d.weekend == lastWeek; }));
+  var maxDistribution = d3.max(activeDistribution, function(d) { return d.values; });
+  var totalDistribution = d3.sum(activeDistribution, function(d) { return d.values; });
+
+  dims = new Dimensions({
+    width: 250,
+    height: 200,
+    marginTop: 10,
+    marginBottom: 80,
+    marginLeft: 80,
+    marginRight: 10
+  });
+
+  x = d3.scale.ordinal()
+    .rangeRoundBands([0, dims.width], 0.2)
+    .domain([7, 6, 5, 4, 3, 2, 1]);
+  y = d3.scale.linear()
+    .rangeRound([0, dims.height])
+    .domain([maxDistribution * 1.1, 0]);
+
+  xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom");
+  yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+    .ticks(5)
+    .tickFormat(d3.format("s"));
+
+  svgg = d3.select("#activeDistribution")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g")
+    .call(dims.transformUpperLeft.bind(dims));
+  svgg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + dims.height + ")")
+    .call(xAxis);
+  svgg.append("g")
+    .attr("class", "y axis")
+    .call(yAxis);
+
+  svgg.selectAll(".bar")
+    .data(activeDistribution)
     .enter()
     .append("rect")
     .attr("class", "bar")
+    .attr("x", function(d) { return x(parseInt(d.key)); })
+    .attr("y", function(d) { return y(d.values); })
     .attr("width", x.rangeBand())
-    .attr("y", function(d) { return y(d.days1); })
-    .attr("height", function(d) { return y(d.days0) - y(d.days1); })
-    .attr("fill", function(d) { return color(d.n); });
+    .attr("height", function(d) { return dims.height - y(d.values); })
+    .attr("title", function(d) {
+      return commaFormat(d.values) + ": " + d3.format("%")(d.values / totalDistribution);
+    });
 }
 
 function fetchUsers() {
@@ -392,7 +473,7 @@ function setupUsers() {
     height: 300,
     marginTop: 35,
     marginBottom: 10,
-    marginLeft: 50,
+    marginLeft: 80,
     marginRight: 10
   });
 
@@ -1025,19 +1106,427 @@ function buildLocale(channelData) {
     });
 }
 
+function fetchLag() {
+  d3.xhr(getBaseURL() + "/pingdates.txt", "text/plain")
+    .get()
+    .on("load",
+      function(t) {
+        gLag = d3.csv.parseRows(t.responseText,
+          function(d, i) {
+            return {
+              date: new Date(d[0]),
+              count: numeric(d[1]) / 0.01
+            };
+          });
+        gLag.sort(function(a, b) { return d3.ascending(a.date, b.date); });
+        setupLag();
+     })
+    .on("error",
+      function(e) {
+        console.error("Error fetching pingdates.txt: " + e);
+      });
+}
+
+// Lag is hard because there are profiles being abandoned all the time.
+// Here we make a guess of presumed-daily-loss based on previous measurements.
+var gPresumedDailyLoss = 0.00375;
+
+d3.select("#dropRate").text(d3.format(".3%")(gPresumedDailyLoss));
+
+function setupLag() {
+  if (!gLag) {
+    return;
+  }
+  var dims = new Dimensions({
+    width: 500,
+    height: 250,
+    marginTop: 10,
+    marginLeft: 118,
+    marginRight: 10,
+    marginBottom: 135
+  });
+
+  var startDate = dateAdd(new Date(getTargetDate()), -MS_PER_DAY * 90);
+  var endDate = new Date(getTargetDate());
+
+  var ticks = [];
+  for (var i = -84; i <= 0; i += 7) {
+    ticks.push(dateAdd(new Date(getTargetDate()), MS_PER_DAY * i));
+  }
+
+  var data = gLag.filter(function(d) {
+    return d.date >= startDate && d.date <= endDate;
+  });
+  var total = d3.sum(data, function(d) { return d.count; });
+  var max = d3.max(data, function(d) { return d.count; });
+  var cumulative = 0;
+  data = data.map(function(d) {
+    var lossAdjusted = d.count - total * gPresumedDailyLoss;
+    cumulative += lossAdjusted;
+    return {
+      date: d.date,
+      count: d.count,
+      lossAdjusted: d.count - total * gPresumedDailyLoss,
+      cumulative: cumulative
+    };
+  });
+  gLagDataTest = data;
+
+  var x = d3.time.scale.utc()
+    .domain([startDate, endDate])
+    .range([0, dims.width]);
+  var y = d3.scale.linear()
+    .rangeRound([0, dims.height])
+    .domain([max, 0]);
+
+  var xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom")
+    .tickValues(ticks)
+    .tickFormat(d3.time.format.utc("%e-%b-%Y"));
+  var yAxis = d3.svg.axis()
+    .scale(y)
+    .ticks(4)
+    .orient("left");
+
+  var svgg = d3.select("#lagChart")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformUpperLeft.bind(dims));
+
+  svgg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + dims.height + ")")
+    .call(xAxis)
+    .selectAll("text")
+    .attr("y", 0)
+    .attr("x", -9)
+    .attr("dy", ".35em")
+    .attr("transform", "rotate(-90)")
+    .style("text-anchor", "end");
+  svgg.append("g")
+    .attr("class", "y axis")
+    .attr("id", "lagCountAxis")
+    .call(yAxis);
+
+  var t = d3.transform();
+  t.translate = [-dims.marginLeft + 15, dims.height / 2];
+  t.rotate = -90;
+  svgg.append("text")
+    .attr("id", "lagCountLabel")
+    .attr("transform", t.toString())
+    .attr("text-anchor", "middle")
+    .text("# of Profiles");
+
+  svgg.append("text")
+    .attr("y", dims.height + dims.marginBottom - 5)
+    .attr("x", dims.width / 2)
+    .attr("text-anchor", "middle")
+    .text("thisPingDate (as of " + getTargetDate() + ")");
+
+  svgg.append("line")
+    .attr("id", "dropRate")
+    .attr({
+      "x1": 0,
+      "x2": dims.width,
+      "y1": y(total * gPresumedDailyLoss),
+      "y2": y(total * gPresumedDailyLoss),
+      "stroke": "#5a5",
+      "stroke-width": "1",
+    });
+
+  var line = d3.svg.line()
+    .x(function(d) { return x(d.date); })
+    .y(function(d) { return y(d.count); });
+
+  svgg.append("path")
+    .datum(data)
+    .attr("class", "line main")
+    .attr("id", "lagCountLine")
+    .attr("d", line);
+
+  svgg.selectAll(".point")
+    .data(data)
+    .enter().append("circle").attr({
+      "class": "point main",
+      "cx": function(d) { return x(d.date); },
+      "cy": function(d) { return y(d.count); },
+      "r": 2
+    });
+
+  dims.marginBottom = 50;
+  x = d3.time.scale.utc()
+    .domain([startDate, endDate])
+    .range([dims.width, 0]);
+  var ypct = d3.scale.linear()
+    .range([0, dims.height])
+    .domain([1, 0]);
+  xAxis = d3.svg.axis()
+    .scale(x)
+    .orient("bottom")
+    .tickValues(ticks)
+    .tickFormat(function(d) {
+      return Math.round((endDate.getTime() - d.getTime()) / MS_PER_DAY);
+    });
+  yAxis = d3.svg.axis()
+    .scale(ypct)
+    .orient("left")
+    .ticks(10)
+    .tickFormat(d3.format("%"));
+
+  svgg = d3.select("#lagDays")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g").call(dims.transformUpperLeft.bind(dims));
+  svgg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + dims.height + ")")
+    .call(xAxis)
+    .selectAll("text")
+    .attr("y", 0)
+    .attr("x", -9)
+    .attr("dy", ".35em")
+    .attr("transform", "rotate(-90)")
+    .style("text-anchor", "end");
+  svgg.append("g")
+    .attr("class", "y axis")
+    .attr("id", "lagPctAxis")
+    .call(yAxis);
+  t.translate[0] = -60;
+  svgg.append("text")
+    .attr("id", "lagPctLabel")
+    .attr("transform", t.toString())
+    .attr("text-anchor", "middle")
+    .text("Cumulatively up-to-date");
+  svgg.append("text")
+    .attr("y", dims.height + dims.marginBottom - 5)
+    .attr("x", dims.width / 2)
+    .attr("text-anchor", "middle")
+    .text("days since snapshot");
+
+  var linepct = d3.svg.area()
+    .x(function(d) { return x(d.date); })
+    .y0(dims.height)
+    .y1(function(d) { return ypct((cumulative - d.cumulative + d.lossAdjusted) / cumulative); });
+
+  svgg.selectAll(".htick").data(ypct.ticks(10))
+    .enter().append("line").attr({
+      "class": "htick",
+      "stroke": "#aaa",
+      "stroke-width": 1,
+      "x1": 0,
+      "x2": dims.width,
+      "y1": function(d) { return ypct(d); },
+      "y2": function(d) { return ypct(d); }
+    });
+  svgg.selectAll(".vtick").data(ticks)
+    .enter().append("line").attr({
+      "class": "vtick",
+      "stroke": "#aaa",
+      "stroke-width": 1,
+      "x1": function(d) { return x(d); },
+      "x2": function(d) { return x(d); },
+      "y1": 0,
+      "y2": dims.height
+    });
+
+  svgg.append("path")
+    .datum(data)
+    .attr({
+      "d": linepct,
+      "fill": "#333",
+      "opacity": "0.5"
+    });
+}
+
+function fetchAddons() {
+  d3.xhr(getBaseURL() + "/addons.csv", "text/plain")
+    .get()
+    .on("load",
+      function(t) {
+        gAddons = channelNest.map(d3.csv.parseRows(t.responseText,
+          function(d, i) {
+            return {
+              channel: d[0],
+              addonID: d[1],
+              userDisabled: tristateBool(d[2]),
+              appDisabled: tristateBool(d[3]),
+              addonName: d[4],
+              count: numeric(d[5])
+            };
+          }), d3.map);
+        setupAddons();
+      })
+      .on("error",
+        function(e) {
+          alert("Error fetching addons.csv: " + e);
+        });
+}
+
+function setupAddons() {
+  if (!gStats || !gAddons) {
+    return;
+  }
+
+  var total = d3.sum(gStats.get(currentChannel()), function(d) { return d.count; }) * gSample;
+
+  function mostCommonName(dlist) {
+    var names = d3.nest()
+      .key(function(d) { return d.addonName; })
+      .rollup(function(dlist) {
+        return d3.sum(dlist, function(d) { return d.count; });
+      })
+      .entries(dlist);
+    names.sort(function(a, b) { return d3.descending(a.values, b.values); });
+    var name = names[0].key;
+    if (names.length > 1) {
+      name += " and " + (names.length - 1) + " others";
+    }
+    return name;
+  }
+
+  var byID = d3.nest()
+    .key(function(d) { return d.addonID; })
+    .rollup(function(dlist) {
+      var count = 0;
+      var userDisabled = 0;
+      var unknown = 0;
+      var active = 0;
+      dlist.forEach(
+        function(d) {
+          count += d.count;
+          if (d.userDisabled === undefined || d.appDisabled === undefined) {
+            unknown += d.count;
+            return;
+          }
+          if (d.userDisabled) {
+            userDisabled += d.count;
+          }
+          if (!d.appDisabled) {
+            active += d.count;
+          }
+        });
+      return {
+        count: count,
+        active: active,
+        userDisabled: userDisabled,
+        unknown: unknown,
+        name: mostCommonName(dlist)
+      };
+    }).entries(gAddons.get(currentChannel()));
+
+  byID.sort(function(a, b) { return d3.descending(a.values.active, b.values.active); });
+  var rows = d3.select("#activeAddonsById tbody")
+    .text("")
+    .selectAll("tr")
+    .data(byID.filter(function(d) { return d.values.active / total > 0.001; }))
+    .enter().append("tr");
+  rows.append("td")
+    .text(function(d) { return d.key; });
+  rows.append("td")
+    .text(function(d) { return d.values.name; });
+  rows.append("td")
+    .text(
+      function(d) {
+        return d3.format(".1%")(d.values.active / total);
+      });
+
+  byID.sort(
+    function(a, b) {
+      return d3.descending(a.values.userDisabled / a.values.count,
+                           b.values.userDisabled / b.values.count);
+    });
+  rows = d3.select("#disabledById tbody")
+    .text("")
+    .selectAll("tr")
+    .data(byID.filter(
+      function(d) {
+        return d.values.count > 100 &&
+          d.values.userDisabled / d.values.count > 0.2;
+      }))
+    .enter().append("tr");
+  rows.append("td")
+    .text(function(d) { return d.key; });
+  rows.append("td")
+    .text(function(d) { return d.values.name; });
+  rows.append("td")
+    .text(
+      function(d) {
+        return d3.format(".1%")(d.values.userDisabled / d.values.count) +
+          " (" + d.values.userDisabled + "/" + d.values.count + ")";
+      });
+
+  var byName = d3.nest()
+    .key(function(d) { return d.addonName; })
+    .rollup(function(dlist) {
+      var count = 0;
+      var ids = d3.map();
+      dlist.forEach(
+        function(d) {
+          count += d.count;
+          if (ids.has(d.addonID)) {
+            ids.set(d.addonID, ids.get(d.addonID) + d.count);
+          }
+          else {
+            ids.set(d.addonID, d.count);
+          }
+        });
+      return {
+        count: count,
+        ids: ids
+      };
+    })
+    .entries(gAddons.get(currentChannel()));
+  byName.sort(
+    function(a, b) {
+      return d3.descending(a.values.ids.size(),
+                           b.values.ids.size());
+    });
+  gByName = byName;
+
+  rows = d3.select("#addonMultiIDs tbody")
+    .text("")
+    .selectAll("tr")
+    .data(byName.filter(function(d) {
+      return d.values.count > 100 && d.values.ids.size() > 3;
+    }))
+    .enter().append("tr");
+  rows.append("td")
+    .text(function(d) { return d.key; });
+  rows.append("td")
+    .text(function(d) {
+      return d.values.ids.entries().slice(0, 20).map(function(d) {
+        return d.key + " (" + d.value + ")";
+      }).join(", ");
+    });
+ rows.append("td")
+   .text(function(d) {
+     return d3.format(".1%")(d.values.count / total);
+   });
+}
+
 d3.selectAll("#channel-form [name=\"channel-selector\"]").on("change",
   function() {
     setupDays();
     setupUsers();
     setupStats();
+    setupAddons();
   });
 
 d3.selectAll("#channel-form [name=\"date-selector\"]").on("change", fetch);
 
 function fetch() {
-  console.log("fetch()");
   fetchDays();
   fetchUsers();
   fetchStats();
+  fetchLag();
+  fetchAddons();
 }
 fetch();
+
+d3.selectAll("section[id] h2").append("a")
+  .attr("class", "section-link")
+  .attr("href",
+    function() {
+      return "#" + closest(this, "section[id]").id;
+    })
+  .text("#");
+

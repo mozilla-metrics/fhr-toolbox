@@ -18,6 +18,17 @@ section {
   clear: both;
 }
 
+table.data {
+  border: 1px solid #aaa;
+  border-collapse: collapse;
+}
+table.data td,
+table.data th {
+  border: 1px solid #aaa;
+  padding: 2px;
+  margin: 0;
+}
+
 .axis path,
 .axis line {
   fill: none;
@@ -84,6 +95,9 @@ section {
   fill: none;
   stroke-dasharray: 5,3;
 }
+.bar:not([fill]) {
+  fill: #4C6185;
+}
 .weekend {
   fill: #DCDEF2;
 }
@@ -111,6 +125,26 @@ section {
 }
 #measurer {
   visibility: hidden;
+}
+
+#lagMouseLine {
+  stroke: #333;
+  stroke-width: 2;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.section-link {
+  display: inline-block;
+  margin-left: 5px;
+  color: #333 !important;
+  text-decoration: none;
+  opacity: 0;
+}
+
+h2:hover .section-link,
+.section-link:focus {
+  opacity: 1;
 }
 
 @media screen and (min-width: 500px) {
