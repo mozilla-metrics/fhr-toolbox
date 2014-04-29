@@ -427,6 +427,54 @@ function setupDays() {
     .attr("title", function(d) {
       return commaFormat(d.values) + ": " + d3.format("%")(d.values / totalDistribution);
     });
+
+  var oldActiveDistribution = d3.nest()
+    .key(function(d) { return d.days; })
+    .rollup(function(dlist) {
+      return d3.sum(dlist, function(d) { return d.days == 0 ? 0 : d.count; });
+    })
+    .sortKeys(function(a, b) { return d3.descending(parseInt(a), parseInt(b)); })
+    .entries(gDays.get(currentChannel()).filter(
+      function(d) {
+        return d.weekend == lastWeek && parseInt(d.version) < 27;
+      }));
+  var maxOld = d3.max(oldActiveDistribution, function(d) { return d.values; });
+  var totalOld = d3.sum(oldActiveDistribution, function(d) { return d.values; });
+
+  y = d3.scale.linear()
+    .rangeRound([0, dims.height])
+    .domain([maxOld * 1.1, 0]);
+
+  yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+    .ticks(5)
+    .tickFormat(d3.format("s"));
+
+  svgg = d3.select("#activeDistributionOld")
+    .text("").call(dims.setupSVG.bind(dims))
+    .append("g")
+    .call(dims.transformUpperLeft.bind(dims));
+  svgg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + dims.height + ")")
+    .call(xAxis);
+  svgg.append("g")
+    .attr("class", "y axis")
+    .call(yAxis);
+
+  svgg.selectAll(".bar")
+    .data(oldActiveDistribution)
+    .enter()
+    .append("rect")
+    .attr("class", "bar")
+    .attr("x", function(d) { return x(parseInt(d.key)); })
+    .attr("y", function(d) { return y(d.values); })
+    .attr("width", x.rangeBand())
+    .attr("height", function(d) { return dims.height - y(d.values); })
+    .attr("title", function(d) {
+      return commaFormat(d.values) + ": " + d3.format("%")(d.values / totalOld);
+    });
 }
 
 function fetchUsers() {
