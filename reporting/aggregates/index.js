@@ -3,7 +3,21 @@ var gDays, gUsers, gStats, gAddons, gLag;
 var MS_PER_DAY = 1000 * 60 * 60 * 24;
 var gTextHeight = 15;
 
-var gSample = 0.05;
+function filterChannel(data) {
+  var c = currentChannel();
+  if (c == "all") {
+    return data;
+  }
+  return data.filter(function(d) { return d.channel == c; });
+}
+
+function lineMain(d) {
+  d.attr({
+    stroke: "#4c6185",
+    "stroke-width": 1,
+    fill: "none"
+  });
+}
 
 var channelNest = d3.nest()
   .key(function (d) { return d.channel; });
@@ -42,20 +56,6 @@ function triStateText(d) {
       return "No";
     }
   return "Unknown";
-}
-
-function tristateBool(d) {
-  switch (d) {
-    case "True":
-    case "1":
-      return true;
-    case "False":
-    case "0":
-      return false;
-    case "?":
-      return undefined;
-  }
-  throw Error("Unexpected tri-state value: " + d);
 }
 
 var gEventPoint = d3.select("svg").node().createSVGPoint();
@@ -181,32 +181,6 @@ function getBaseURL() {
   return getTargetDate();
 }
 
-function fetchDays() {
-  d3.xhr(getBaseURL() + "/days.csv", "text/plain")
-    .get()
-    .on("load",
-      function(t) {
-        gDays = channelNest.map(d3.csv.parseRows(t.responseText,
-          function(d, i) {
-            if (d.length == 4) {
-              d.splice(1, 0, "unknown");
-            }
-            return {
-              channel: d[0],
-              version: d[1],
-              weekend: d[2],
-              days: numeric(d[3]),
-              count: numeric(d[4]) / gSample
-            };
-          }), d3.map);
-        setupDays();
-      })
-    .on("error",
-      function(e) {
-        alert("Error fetching days.csv: " + e);
-      });
-}
-
 function setupDays() {
   if (!gDays) {
     return;
@@ -218,20 +192,32 @@ function setupDays() {
       var days = d3.sum(dlist, function(d) { return d.count * d.days; });
       return {
         active: active,
-        activeDays: days
+        activeDays: days,
       };
     })
     .sortKeys(d3.ascending);
 
-  var activeByWeek = activeNest.entries(gDays.get(currentChannel()));
-  gActiveByWeek = activeByWeek;
+  var activeByWeek = activeNest.entries(filterChannel(gDays));
+  if (gLag) {
+    activeByWeek.forEach(function(d) {
+      var adjustment = lagAdjustment(new Date(d.key));
+      d.values.activeAdjusted = d.values.active / adjustment;
+      d.values.activeDaysAdjusted = d.values.activeDays / adjustment;
+    });
+  }
   var saturdays = activeByWeek.map(function(d) { return d.key; });
 
-  var maxActive = d3.max(activeByWeek, function(d) { return d.values.active; });
-  var maxActiveDays = d3.max(activeByWeek, function(d) { return d.values.activeDays; });
+  var maxActive = d3.max(activeByWeek,
+    function(d) {
+      return d.values.activeAdjusted || d.values.active;
+    });
+  var maxActiveDays = d3.max(activeByWeek,
+    function(d) {
+      return d.values.activeDaysAdjusted || d.values.activeDays;
+    });
 
   var dims = new Dimensions({
-    width: 80,
+    width: 200,
     height: 250,
     marginTop: 5,
     marginLeft: 85,
@@ -292,9 +278,21 @@ function setupDays() {
     .x(function(d) { return x(d.key); })
     .y(function(d) { return y(d.values.active); });
 
+  var adjustedLine = d3.svg.line()
+    .x(function(d) { return x(d.key); })
+    .y(function(d) { return y(d.values.activeAdjusted); });
+
+  if (gLag) {
+    svgg.append("path")
+      .datum(activeByWeek)
+      .attr("stroke", "#599FB3")
+      .attr("stroke-dasharray", "5,3")
+      .attr("fill", "none")
+      .attr("d", adjustedLine);
+  }
   svgg.append("path")
     .datum(activeByWeek)
-    .attr("class", "line main")
+    .call(lineMain)
     .attr("d", line);
   var points = svgg.selectAll(".point")
     .data(activeByWeek)
@@ -353,9 +351,21 @@ function setupDays() {
     .x(function(d) { return x(d.key); })
     .y(function(d) { return y(d.values.activeDays); });
 
+  adjustedLine = d3.svg.line()
+    .x(function(d) { return x(d.key); })
+    .y(function(d) { return y(d.values.activeDaysAdjusted); });
+
+  if (gLag) {
+    svgg.append("path")
+      .datum(activeByWeek)
+      .attr("stroke", "#599FB3")
+      .attr("stroke-dasharray", "5,3")
+      .attr("fill", "none")
+      .attr("d", adjustedLine);
+  }
   svgg.append("path")
     .datum(activeByWeek)
-    .attr("class", "line main")
+    .call(lineMain)
     .attr("d", line);
   points = svgg.selectAll(".point")
     .data(activeByWeek)
@@ -374,7 +384,7 @@ function setupDays() {
        return d3.sum(dlist, function(d) { return d.days == 0 ? 0 : d.count; });
     })
     .sortKeys(function(a, b) { return d3.descending(parseInt(a), parseInt(b)); })
-    .entries(gDays.get(currentChannel()).filter(function(d) { return d.weekend == lastWeek; }));
+    .entries(filterChannel(gDays).filter(function(d) { return d.weekend == lastWeek; }));
   var maxDistribution = d3.max(activeDistribution, function(d) { return d.values; });
   var totalDistribution = d3.sum(activeDistribution, function(d) { return d.values; });
 
@@ -434,7 +444,7 @@ function setupDays() {
       return d3.sum(dlist, function(d) { return d.days == 0 ? 0 : d.count; });
     })
     .sortKeys(function(a, b) { return d3.descending(parseInt(a), parseInt(b)); })
-    .entries(gDays.get(currentChannel()).filter(
+    .entries(filterChannel(gDays).filter(
       function(d) {
         return d.weekend == lastWeek && parseInt(d.version) < 27;
       }));
@@ -477,29 +487,6 @@ function setupDays() {
     });
 }
 
-function fetchUsers() {
-  d3.xhr(getBaseURL() + "/users.csv", "text/plain")
-    .get()
-    .on("load",
-      function(t) {
-        gUsers = channelNest.map(d3.csv.parseRows(t.responseText,
-          function(d, i) {
-            return {
-              channel: d[0],
-              type: d[1],
-              day: d[2],
-              count: numeric(d[3]) / gSample
-            };
-          }), d3.map);
-        setupUsers();
-      })
-    .on("error",
-      function(e) {
-        console.error(e);
-        alert("Error fecthing users.csv: " + e);
-      });
-}
-
 function setupUsers() {
   if (!gUsers) {
     return;
@@ -509,12 +496,9 @@ function setupUsers() {
     .key(function(d) { return d.day; })
     .sortKeys(d3.ascending)
     .rollup(function(vl) {
-      if (vl.length != 1) {
-        throw Error("unexpected value");
-      }
-      return vl[0].count;
+      return d3.sum(vl, function(d) { return d.count; });
     });
-  var channel = userNest.map(gUsers.get(currentChannel()), d3.map);
+  var channel = userNest.map(filterChannel(gUsers), d3.map);
 
   var dims = new Dimensions({
     width: 150,
@@ -782,41 +766,12 @@ function setupUsers() {
     .text("7-day rolling average");
 }
 
-function fetchStats() {
-  d3.xhr(getBaseURL() + "/stats.csv", "text/plain")
-    .get()
-    .on("load",
-      function(t) {
-        gStats = channelNest.map(d3.csv.parseRows(t.responseText,
-          function(d, i) {
-            return {
-              channel: d[0],
-              version: d[1],
-              locale: d[2],
-              defaultBrowser: d[3],
-              telemetry: d[4],
-              autoUpdate: d[5],
-              updateEnabled: d[6],
-              geo: d[7],
-              addonsv: d[8],
-              count: numeric(d[9]) / gSample
-            };
-          }), d3.map);
-        setupStats();
-      })
-    .on("error",
-      function(err) {
-        console.error(err);
-        alert("Error fetching stats.csv: " + e);
-    });
-}
-
 function setupStats() {
   if (!gStats) {
     return;
   }
 
-  var channelData = gStats.get(currentChannel());
+  var channelData = filterChannel(gStats);
 
   var defaultBrowserNest = d3.nest()
     .key(function(d) {
@@ -1154,37 +1109,21 @@ function buildLocale(channelData) {
     });
 }
 
-function fetchLag() {
-  d3.xhr(getBaseURL() + "/pingdates.txt", "text/plain")
-    .get()
-    .on("load",
-      function(t) {
-        gLag = d3.csv.parseRows(t.responseText,
-          function(d, i) {
-            return {
-              date: new Date(d[0]),
-              count: numeric(d[1]) / 0.01
-            };
-          });
-        gLag.sort(function(a, b) { return d3.ascending(a.date, b.date); });
-        setupLag();
-     })
-    .on("error",
-      function(e) {
-        console.error("Error fetching pingdates.txt: " + e);
-      });
+function lagAdjustment(d) {
+  for (var i = 0; i < gLag.data.length; ++i) {
+    if (gLag.data[i].date >= d) {
+      return (gLag.adjustedTotal - gLag.data[i].cumulative + gLag.data[i].adjusted) / gLag.adjustedTotal;
+    }
+  }
+  return 1;
 }
-
-// Lag is hard because there are profiles being abandoned all the time.
-// Here we make a guess of presumed-daily-loss based on previous measurements.
-var gPresumedDailyLoss = 0.00375;
-
-d3.select("#dropRate").text(d3.format(".3%")(gPresumedDailyLoss));
 
 function setupLag() {
   if (!gLag) {
     return;
   }
+  d3.select("#dropRate").text(d3.format(".3%")(gLag.dailyLossRatio));
+
   var dims = new Dimensions({
     width: 500,
     height: 250,
@@ -1202,23 +1141,9 @@ function setupLag() {
     ticks.push(dateAdd(new Date(getTargetDate()), MS_PER_DAY * i));
   }
 
-  var data = gLag.filter(function(d) {
-    return d.date >= startDate && d.date <= endDate;
-  });
-  var total = d3.sum(data, function(d) { return d.count; });
+  var data = gLag.data;
+  var total = gLag.total;
   var max = d3.max(data, function(d) { return d.count; });
-  var cumulative = 0;
-  data = data.map(function(d) {
-    var lossAdjusted = d.count - total * gPresumedDailyLoss;
-    cumulative += lossAdjusted;
-    return {
-      date: d.date,
-      count: d.count,
-      lossAdjusted: d.count - total * gPresumedDailyLoss,
-      cumulative: cumulative
-    };
-  });
-  gLagDataTest = data;
 
   var x = d3.time.scale.utc()
     .domain([startDate, endDate])
@@ -1276,8 +1201,8 @@ function setupLag() {
     .attr({
       "x1": 0,
       "x2": dims.width,
-      "y1": y(total * gPresumedDailyLoss),
-      "y2": y(total * gPresumedDailyLoss),
+      "y1": y(gLag.dailyLoss),
+      "y2": y(gLag.dailyLoss),
       "stroke": "#5a5",
       "stroke-width": "1",
     });
@@ -1353,7 +1278,7 @@ function setupLag() {
   var linepct = d3.svg.area()
     .x(function(d) { return x(d.date); })
     .y0(dims.height)
-    .y1(function(d) { return ypct((cumulative - d.cumulative + d.lossAdjusted) / cumulative); });
+    .y1(function(d) { return ypct((gLag.adjustedTotal - d.cumulative + d.adjusted) / gLag.adjustedTotal); });
 
   svgg.selectAll(".htick").data(ypct.ticks(10))
     .enter().append("line").attr({
@@ -1385,36 +1310,12 @@ function setupLag() {
     });
 }
 
-function fetchAddons() {
-  d3.xhr(getBaseURL() + "/addons.csv", "text/plain")
-    .get()
-    .on("load",
-      function(t) {
-        gAddons = channelNest.map(d3.csv.parseRows(t.responseText,
-          function(d, i) {
-            return {
-              channel: d[0],
-              addonID: d[1],
-              userDisabled: tristateBool(d[2]),
-              appDisabled: tristateBool(d[3]),
-              addonName: d[4],
-              count: numeric(d[5])
-            };
-          }), d3.map);
-        setupAddons();
-      })
-      .on("error",
-        function(e) {
-          alert("Error fetching addons.csv: " + e);
-        });
-}
-
 function setupAddons() {
   if (!gStats || !gAddons) {
     return;
   }
 
-  var total = d3.sum(gStats.get(currentChannel()), function(d) { return d.count; }) * gSample;
+  var total = d3.sum(filterChannel(gStats), function(d) { return d.count; });
 
   function mostCommonName(dlist) {
     var names = d3.nest()
@@ -1426,7 +1327,7 @@ function setupAddons() {
     names.sort(function(a, b) { return d3.descending(a.values, b.values); });
     var name = names[0].key;
     if (names.length > 1) {
-      name += " and " + (names.length - 1) + " others";
+      name += " (and " + (names.length - 1) + " others)";
     }
     return name;
   }
@@ -1459,7 +1360,7 @@ function setupAddons() {
         unknown: unknown,
         name: mostCommonName(dlist)
       };
-    }).entries(gAddons.get(currentChannel()));
+    }).entries(filterChannel(gAddons));
 
   byID.sort(function(a, b) { return d3.descending(a.values.active, b.values.active); });
   var rows = d3.select("#activeAddonsById tbody")
@@ -1522,7 +1423,7 @@ function setupAddons() {
         ids: ids
       };
     })
-    .entries(gAddons.get(currentChannel()));
+    .entries(filterChannel(gAddons));
   byName.sort(
     function(a, b) {
       return d3.descending(a.values.ids.size(),
@@ -1559,16 +1460,6 @@ d3.selectAll("#channel-form [name=\"channel-selector\"]").on("change",
     setupAddons();
   });
 
-d3.selectAll("#channel-form [name=\"date-selector\"]").on("change", fetch);
-
-function fetch() {
-  fetchDays();
-  fetchUsers();
-  fetchStats();
-  fetchLag();
-  fetchAddons();
-}
-fetch();
 
 d3.selectAll("section[id] h2").append("a")
   .attr("class", "section-link")
@@ -1578,3 +1469,44 @@ d3.selectAll("section[id] h2").append("a")
     })
   .text("#");
 
+var gWorker = new Worker("worker.js");
+gWorker.onmessage = function(e) {
+  var d = e.data;
+  switch (d.type) {
+    case "data-days":
+      gDays = d.data;
+      setupDays();
+      return;
+    case "data-users":
+      gUsers = d.data;
+      setupUsers();
+      setupAddons();
+      return;
+    case "data-stats":
+      gStats = d.data;
+      setupStats();
+      return;
+    case "data-lag":
+      gLag = d.data;
+      setupLag();
+      setupDays();
+      return;
+    case "data-addons":
+      gAddons = d.data;
+      setupAddons();
+      return;
+  }
+  throw Error("Unexpected message from worker: " + d);
+};
+
+d3.selectAll("#channel-form [name=\"date-selector\"]").on("change", fetch);
+
+function fetch() {
+  gWorker.postMessage(
+    {
+      type: "fetch",
+      baseURI: getBaseURL(),
+      snapshotDate: getTargetDate()
+    });
+}
+fetch();

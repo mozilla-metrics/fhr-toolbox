@@ -8,6 +8,7 @@
 
   <p>General notes:
     <ul>
+      <li>Data is from a 5% sample.
       <li>FHR data isn't uploaded immediately. We don't know
         how much lag there is, but the short-term dropoff in recent weeks
         doesn't match up with longer-term historical data.
@@ -20,11 +21,13 @@
 
   <form id="channel-form">
     <p>Select a snapshot date:
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-21" id="date-2014-04-21" checked><label for="date-2014-04-21">2014-04-21</label></span>
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-14" id="date-2014-04-14"><label for="date-2014-04-14">2014-04-14</label></span>
     <span class="channel-span"><input type="radio" name="date-selector" value="2014-03-16" id="date-2014-03-16"><label for="date-2014-03-16">2014-03-16</label></span>
-    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-14" id="date-2014-04-14" checked><label for="date-2014-04-14">2014-04-14</label></span>
 
     <p>Select a release channel:
-    <span class="channel-span"><input type="radio" name="channel-selector" value="release" id="channel-release" checked><label for="channel-release">Release</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="all" id="channel-all" checked><label for="channel-all">All</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="release" id="channel-release"><label for="channel-release">Release</label></span>
     <span class="channel-span"><input type="radio" name="channel-selector" value="beta" id="channel-beta"><label for="channel-beta">Beta</label></span>
     <span class="channel-span"><input type="radio" name="channel-selector" value="aurora" id="channel-aurora"><label for="channel-aurora">Aurora</label></span>
     <span class="channel-span"><input type="radio" name="channel-selector" value="nightly" id="channel-nightly"><label for="channel-nightly">Nightly</label></span>
@@ -34,7 +37,7 @@
     <section id="users">
       <h2>Active Profiles per Week</h2>
 
-      <p>Number of users active at any point in a given <abbr title="Sunday-Saturday">week</abbr>:
+      <p>Number of users active at any point in a given <abbr title="Sunday-Saturday">week</abbr>. Dotted line is a naive adjustment for reporting lag (see below):
       <p>
       <svg></svg>
     </section>
@@ -135,6 +138,10 @@
     <h2>Addons</h2>
 
     <h3>Most Popular Active Addons (by addon ID)</h3>
+
+    <p>Note: this addon reporting was enabled in Firefox 29. The "Release"
+      channel won't have good data for another few weeks.
+
     <table id="activeAddonsById" class="data">
       <thead>
         <tr>
