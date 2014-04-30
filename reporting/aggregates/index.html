@@ -1,0 +1,211 @@
+<head>
+  <meta charset="UTF-8">
+  <title>FHR Aggregates</title>
+
+  <link rel="stylesheet" type="text/css" href="index.css">
+<body>
+  <h1>FHR Aggregates</h1>
+
+  <p>General notes:
+    <ul>
+      <li>Data is from a 5% sample.
+      <li>FHR data isn't uploaded immediately. We don't know
+        how much lag there is, but the short-term dropoff in recent weeks
+        doesn't match up with longer-term historical data.
+        This report delays analysis by eight days, but I have serious concerns
+        that lag might be as much as five weeks behind.
+      <li>This data comes from a heuristically de-orphaned data set, but
+        it is possible that we are both under- and over-counting some
+        profiles because of data issues.
+    </ul>
+
+  <form id="channel-form">
+    <p>Select a snapshot date:
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-21" id="date-2014-04-21" checked><label for="date-2014-04-21">2014-04-21</label></span>
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-04-14" id="date-2014-04-14"><label for="date-2014-04-14">2014-04-14</label></span>
+    <span class="channel-span"><input type="radio" name="date-selector" value="2014-03-16" id="date-2014-03-16"><label for="date-2014-03-16">2014-03-16</label></span>
+
+    <p>Select a release channel:
+    <span class="channel-span"><input type="radio" name="channel-selector" value="all" id="channel-all" checked><label for="channel-all">All</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="release" id="channel-release"><label for="channel-release">Release</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="beta" id="channel-beta"><label for="channel-beta">Beta</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="aurora" id="channel-aurora"><label for="channel-aurora">Aurora</label></span>
+    <span class="channel-span"><input type="radio" name="channel-selector" value="nightly" id="channel-nightly"><label for="channel-nightly">Nightly</label></span>
+  </form>
+
+  <div>
+    <section id="users">
+      <h2>Active Profiles per Week</h2>
+
+      <p>Number of users active at any point in a given <abbr title="Sunday-Saturday">week</abbr>. Dotted line is a naive adjustment for reporting lag (see below):
+      <p>
+      <svg></svg>
+    </section>
+
+    <section id="usage">
+      <h2>Usage Days</h2>
+
+      <p>Total active days per week:
+
+      <p>
+        <svg id="activeDays"></svg>
+
+      <p>Distribution of users by how many days per week they used Firefox last week:
+
+      <p>
+        <svg id="activeDistribution"></svg>
+
+      <p>The same distribution limited to profiles running Firefox 26 and earlier:
+      <p><svg id="activeDistributionOld"></svg>
+    </section>
+  </div>
+
+  <section id="retention">
+    <h2>Acquisition/Retention/Loss</h2>
+
+    <dl id="retention-defs">
+      <dt id="retention-active">Active Profile</dt>
+      <dd>An active profile is one who has used the browser in the last six weeks
+        (42 days) and the prior six week period.</dd>
+
+      <dt id="retention-lost">Lost Profile</dt>
+      <dd>A lost profile was not active in the last six weeks but was active
+        in the prior six week period.</dd>
+
+      <dt id="retention-returning">Returning Profile</dt>
+      <dd>A returning profile was active within the past six weeks but was away
+        for six weeks or more before that.</dd>
+
+      <dt id="retention-new">New Profile</dt>
+      <dd>A new profile is one whose FHR record starts within the last six weeks.</dd>
+    </dl>
+
+    <svg></svg>
+
+    <p><em>Note: a profile-reset counts as lost/new profile. The lost/new
+        numbers here don't necessarily indicate user churn.</em></p>
+  </section>
+
+  <section id="newbyday">
+    <h2>New Profiles By Day</h2>
+
+    <p>On what days did new profiles appear?</p>
+
+    <svg></svg>
+  </section>
+
+  <section id="defaultBrowser" class="narrow">
+    <h2>Default Browser</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <section id="updatesEnabled" class="narrow">
+    <h2>Updates Enabled</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <section id="telemetryEnabled" class="narrow">
+    <h2>Telemetry Enabled</h2>
+    <table class="legend">
+      <tbody></tbody>
+    </table>
+    <svg></svg>
+  </section>
+
+  <section id="locales">
+    <h2>Locales</h2>
+    <table id="bylocale-legend" class="legend">
+      <tbody></tbody>
+    </table>
+    <svg id="bylocale-chart">
+      <g class="chart"></g>
+      <text id="measurer"></text>
+    </svg>
+
+    <table id="bygeo-legend">
+      <tbody></tbody>
+    </table>
+    <svg id="bygeo-chart"></svg>
+  </section>
+
+  <section id="addons">
+    <h2>Addons</h2>
+
+    <h3>Most Popular Active Addons (by addon ID)</h3>
+
+    <p>Note: this addon reporting was enabled in Firefox 29. The "Release"
+      channel won't have good data for another few weeks.
+
+    <table id="activeAddonsById" class="data">
+      <thead>
+        <tr>
+          <td>ID
+          <td>Name
+          <td>Active %
+      <tbody>
+    </table>
+
+    <h3>Most-Disabled Addons (by addon ID)</h3>
+    <table id="disabledById" class="data">
+      <thead>
+        <tr>
+          <td>ID
+          <td>Name
+          <td>userDisabled
+      <tbody>
+    </table>
+
+    <h3>Addons Names With Varying Addon IDs</h3>
+    <table id="addonMultiIDs" class="data">
+      <thead>
+        <tr>
+          <td>Name
+          <td>IDs
+          <td>Total Install %
+      <tbody>
+    </table>
+  </section>
+
+  <section id="lag">
+    <h2>Lag</h2>
+
+    <p>Distribution of "thisPingDate" from profiles in this snapshot. The green
+      dotted line shows what a constant profile-drop rate of
+      <span id="dropRate">N</span> per day would be.
+    <p><svg id="lagChart"></svg>
+
+    <p>Assuming the constant profile-loss rate, how many FHR profiles will be
+      up to date looking backwards in history from an FHR snapshot?
+
+
+    <p><svg id="lagDays"></svg>
+  </section>
+
+  <section>
+    <h2>Things To Do</h2>
+
+    <ol>
+      <li>Subdivide locale by geo</li>
+      <li>Reverse breakdown by geo/locale</li>
+      <li>Report by hours-used</li>
+      <li>Histogram of FHR payload size</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>This Dashboard</h2>
+
+    <ul>
+      <li><a href="https://github.com/bsmedberg/fhr-toolbox/blob/master/jydoop/aggregate-collection.py">Data aggregation script</a> (uses <a href="https://github.com/mozilla/jydoop/">jydoop</a>)</li>
+      <li><a href="https://github.com/bsmedberg/fhr-toolbox/tree/master/reporting/aggregates">This dashboard</a>
+    </ul>
+  </section>
+
+  <script src="d3.v3.min.js"></script>
+  <script src="index.js"></script>
