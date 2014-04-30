@@ -8,7 +8,7 @@ var window = {
   Element: function(){},
   CSSStyleDeclaration: function(){},
 };
-importScripts("d3.js");
+importScripts("d3.v3.min.js");
 
 var MS_PER_DAY = 1000 * 60 * 60 * 24;
 function numeric(v) {
