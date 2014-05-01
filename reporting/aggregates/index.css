@@ -81,14 +81,6 @@ table.data th {
 .bar-connector {
   stroke: #333;
 }
-.line.main {
-  stroke: #4C6185;
-  stroke-width: 1;
-  fill: none;
-}
-.point.main {
-  fill: #4C6185;
-}
 .line.rolling {
   stroke: rgba(105,134,184,0.6);
   stroke-width: 2;

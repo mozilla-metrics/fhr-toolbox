@@ -18,6 +18,12 @@ function lineMain(d) {
     fill: "none"
   });
 }
+function pointMain(d) {
+  d.attr({
+    fill: "#4c6185",
+    "r": 3
+  });
+}
 
 var channelNest = d3.nest()
   .key(function (d) { return d.channel; });
@@ -46,7 +52,7 @@ function closest(el, selector) {
   return null;
 }
 
-var commaFormat = d3.format(",d");
+var commaFormat = d3.format(",.0f");
 
 function triStateText(d) {
   switch (d) {
@@ -71,6 +77,10 @@ function dateAdd(d, ms) {
 
 function numeric(v) {
   return +v;
+}
+
+function adjustmentFactor(r, factor) {
+  return (r + factor) / (factor + 1);
 }
 
 function polarToRect(r, a) {
@@ -200,11 +210,12 @@ function setupDays() {
   var activeByWeek = activeNest.entries(filterChannel(gDays));
   if (gLag) {
     activeByWeek.forEach(function(d) {
-      var adjustment = lagAdjustment(new Date(d.key));
+      var adjustment = adjustmentFactor(lagAdjustment(new Date(d.key)), 3);
       d.values.activeAdjusted = d.values.active / adjustment;
       d.values.activeDaysAdjusted = d.values.activeDays / adjustment;
     });
   }
+  gActiveByWeek = activeByWeek;
   var saturdays = activeByWeek.map(function(d) { return d.key; });
 
   var maxActive = d3.max(activeByWeek,
@@ -289,19 +300,30 @@ function setupDays() {
       .attr("stroke-dasharray", "5,3")
       .attr("fill", "none")
       .attr("d", adjustedLine);
+
+    var adjustedPoints = svgg.selectAll(".point.adjusted")
+      .data(activeByWeek)
+      .enter()
+      .append("circle")
+      .attr("class", "point adjusted")
+      .attr("cx", function(d) { return x(d.key); })
+      .attr("cy", function(d) { return y(d.values.activeAdjusted); })
+      .attr("r", 3)
+      .attr("fill", "#599fb3")
+      .attr("title", function(d) { return commaFormat(d.values.activeAdjusted); });
   }
   svgg.append("path")
     .datum(activeByWeek)
     .call(lineMain)
     .attr("d", line);
-  var points = svgg.selectAll(".point")
+  var points = svgg.selectAll(".point.main")
     .data(activeByWeek)
     .enter()
     .append("circle")
     .attr("class", "point main")
     .attr("cx", function(d) { return x(d.key); })
     .attr("cy", function(d) { return y(d.values.active); })
-    .attr("r", 3)
+    .call(pointMain)
     .attr("title", function(d) { return commaFormat(d.values.active); });
 
   y = d3.scale.linear()
@@ -362,19 +384,30 @@ function setupDays() {
       .attr("stroke-dasharray", "5,3")
       .attr("fill", "none")
       .attr("d", adjustedLine);
+
+    adjustedPolints = svgg.selectAll(".point.adjusted")
+      .data(activeByWeek)
+      .enter()
+      .append("circle")
+      .attr("class", "point adjusted")
+      .attr("cx", function(d) { return x(d.key); })
+      .attr("cy", function(d) { return y(d.values.activeDaysAdjusted); })
+      .attr("r", 3)
+      .attr("fill", "#599fb3")
+      .attr("title", function(d) { return commaFormat(d.values.activeDaysAdjusted); });
   }
   svgg.append("path")
     .datum(activeByWeek)
     .call(lineMain)
     .attr("d", line);
-  points = svgg.selectAll(".point")
+  points = svgg.selectAll(".point.main")
     .data(activeByWeek)
     .enter()
     .append("circle")
     .attr("class", "point main")
     .attr("cx", function(d) { return x(d.key); })
     .attr("cy", function(d) { return y(d.values.activeDays); })
-    .attr("r", 3)
+    .call(pointMain)
     .attr("title", function(d) { return commaFormat(d.values.activeDays); });
 
   var lastWeek = saturdays[saturdays.length - 1];
@@ -708,7 +741,7 @@ function setupUsers() {
 
   svgg.append("path")
     .datum(data)
-    .attr("class", "line main")
+    .call(lineMain)
     .attr("d", mainLine);
 
   var points = svgg.selectAll(".point")
@@ -718,7 +751,7 @@ function setupUsers() {
     .attr("class", "point main")
     .attr("cx", function(d) { return x(d.date); })
     .attr("cy", function(d) { return y(d.count); })
-    .attr("r", 3);
+    .call(pointMain);
 
   svgg.append("path")
     .datum(data.filter(function(d) { return d.rolling !== undefined; }))
@@ -737,7 +770,7 @@ function setupUsers() {
       width: dims.legendWidth
     });
   legend.append("line")
-    .attr("class", "line main")
+    .call(lineMain)
     .attr({
       x1: 10, x2: 35,
       y1: 20, y2: 20
@@ -1213,7 +1246,7 @@ function setupLag() {
 
   svgg.append("path")
     .datum(data)
-    .attr("class", "line main")
+    .call(lineMain)
     .attr("id", "lagCountLine")
     .attr("d", line);
 
@@ -1223,7 +1256,8 @@ function setupLag() {
       "class": "point main",
       "cx": function(d) { return x(d.date); },
       "cy": function(d) { return y(d.count); },
-      "r": 2
+      "r": 2,
+      "fill": "#4c6185"
     });
 
   dims.marginBottom = 50;
