@@ -20,6 +20,7 @@ import healthreportutils
 from datetime import date, datetime, timedelta
 import os, shutil, csv
 import sys, codecs
+import traceback
 
 import mrjob
 from mrjob.job import MRJob
@@ -75,8 +76,10 @@ def logexceptions(func):
 
             for k1, v1 in func(job, k, v):
                 yield (k1, v1)
-        except Exception as e:
-            yield ("exception", (str(e), v))
+        except:
+            exc = traceback.format_exc()
+            print >>sys.stderr, "Script exception: ", exc
+            yield ("exception", exc)
     return wrapper
 
 @logexceptions
@@ -120,11 +123,16 @@ def map(job, key, payload):
         yield (("days", channel, version, ending.strftime("%Y-%m-%d"), days), 1)
         yield (("ticks", channel, version, ending.strftime("%Y-%m-%d"), hours), 1)
 
+    sd = start_date(job.options.start_date)
+    week_end = sd # sd is always a Saturday
+    for n in xrange(0, 12):
+        for r in write_week(week_end - timedelta(days=7 * n)):
+            yield r
+
     first_active = None
     last_info = None
     last_update = None
 
-    sd = start_date(job.options.start_date)
     for d in date_back(sd, LOSS_DAYS):
         day = get_day(d)
         if active_day(day):
@@ -153,11 +161,6 @@ def map(job, key, payload):
                 yield (("users", channel, "lost", d.strftime("%Y-%m-%d")), 1)
                 break
         return # no other stats if user wasn't active
-
-    week_end = sd # sd is always a Saturday
-    for n in xrange(0, 12):
-        for r in write_week(week_end - timedelta(days=7 * n)):
-            yield r
 
     # Addon and plugin data: require the v2 probes with correct names
     addons = payload.last.get("org.mozilla.addons.addons", {})
