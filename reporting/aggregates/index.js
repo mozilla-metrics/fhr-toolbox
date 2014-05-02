@@ -1533,7 +1533,7 @@ gWorker.onmessage = function(e) {
   throw Error("Unexpected message from worker: " + d);
 };
 
-d3.selectAll("#channel-form [name=\"date-selector\"]").on("change", fetch);
+d3.selectAll("#channel-dates").on("change", fetch);
 
 function fetch() {
   gWorker.postMessage(
@@ -1543,4 +1543,33 @@ function fetch() {
       snapshotDate: getTargetDate()
     });
 }
-fetch();
+
+function fetchDates() {
+  d3.json("dates.json", function(dates) {
+    var spans = d3.select("#channel-dates").selectAll(".channel-span")
+      .data(dates)
+      .enter()
+      .append("span")
+      .attr("class", "channel-span");
+    console.log(spans);
+    spans.append("input")
+      .attr({
+        "type": "radio",
+        "name": "date-selector",
+        "value": function(d) { return d; },
+        "id": function(d) { return "date-" + d; }
+      })
+      .each(function(d, i) {
+        if (i == 0) {
+          d3.select(this).attr("checked", "checked");
+        }
+      });
+    spans.append("label")
+      .attr("for", function(d) { return "date-" + d; })
+      .text(function(d) { return d; });
+
+
+    fetch();
+  });
+}
+fetchDates();
