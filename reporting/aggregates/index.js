@@ -1345,6 +1345,7 @@ function setupLag() {
 }
 
 function setupAddons() {
+  return;
   if (!gStats || !gAddons) {
     return;
   }
@@ -1556,8 +1557,8 @@ function fetchDates() {
       .attr({
         "type": "radio",
         "name": "date-selector",
-        "value": function(d) { return d; },
-        "id": function(d) { return "date-" + d; }
+        "value": function(d) { return d.date; },
+        "id": function(d) { return "date-" + d.date; }
       })
       .each(function(d, i) {
         if (i == 0) {
@@ -1565,9 +1566,15 @@ function fetchDates() {
         }
       });
     spans.append("label")
-      .attr("for", function(d) { return "date-" + d; })
-      .text(function(d) { return d; });
-
+      .attr("for", function(d) { return "date-" + d.date; })
+      .text(
+        function(d) {
+          var r = d.date;
+          if (d.sample != 1.0) {
+            r += " (" + d3.format("%")(d.sample) + " sample)";
+          }
+          return r;
+        });
 
     fetch();
   });
