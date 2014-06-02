@@ -11,6 +11,7 @@ State data:
 * telemetry-enabled breakdown
 * updates-enabled breakdown
 * addonid/addonname breakdown
+* OS breakdown and win64 once we have it
 
 All data separated by channel and filtered for the main channels. Partner
 channels grouped into the main channels.
@@ -103,6 +104,14 @@ def map(job, key, payload):
         return days.get(dstr, None)
 
     version = payload.get("geckoAppInfo", {}).get("version", "?")
+    sd = start_date(job.options.start_date)
+    week_end = sd # sd is always a Saturday
+
+    for d in date_back(week_end, 42):
+        day = get_day(d)
+        if active_day(day):
+            experiment = day.get("org.mozilla.experiments.info", {}).get("lastActive", "-")
+            yield (("experiment", channel, version, d.strftime("%Y-%m-%d"), experiment), 1)
 
     def write_week(ending):
         days = 0
@@ -123,8 +132,6 @@ def map(job, key, payload):
         yield (("days", channel, version, ending.strftime("%Y-%m-%d"), days), 1)
         yield (("ticks", channel, version, ending.strftime("%Y-%m-%d"), hours), 1)
 
-    sd = start_date(job.options.start_date)
-    week_end = sd # sd is always a Saturday
     for n in xrange(0, 12):
         for r in write_week(week_end - timedelta(days=7 * n)):
             yield r
@@ -192,6 +199,9 @@ def map(job, key, payload):
     if not last_update:
         last_update = {}
 
+    osname = payload.last.get("org.mozilla.sysinfo.sysinfo", {}).get("name", "?")
+    osversion = payload.last.get("org.mozilla.sysinfo.sysinfo", {}).get("version", "?")
+    wow64 = payload.last.get("org.mozilla.sysinfo.sysinfo", {}).get("isWow64", "?")
     locale = payload.last.get("org.mozilla.appInfo.appinfo", {}).get("locale", "?")
     default_browser = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isDefaultBrowser", "?")
     telemetry = last_info.get("org.mozilla.appInfo.appinfo", {}).get("isTelemetryEnabled", "?")
@@ -200,7 +210,7 @@ def map(job, key, payload):
     geo = payload.get("geoCountry", "?")
 
     yield (("stats", channel, version, locale, default_browser, telemetry,
-            update_auto, update_enabled, geo, addons_v), 1)
+            update_auto, update_enabled, geo, addons_v, osname, osversion, wow64), 1)
 
 def reduce(job, k, vlist):
     if k == "exception":
