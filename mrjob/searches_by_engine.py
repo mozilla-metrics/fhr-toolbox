@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# THIS SCRIPT IS OUT OF DATE: IT NEES TO BE PORTED TO USE MRJob instead of
+# jydoop
+
 import jydoop
 
 from healthreportutils import (
