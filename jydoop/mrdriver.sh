@@ -11,7 +11,7 @@ pip install --user mrjob
 mkdir $HOME/tmp 2>/dev/null
 export TMPDIR=$HOME/tmp
 
-HADOOP_HOME=/opt/cloudera/parcels/CDH/lib/hadoop-0.20-mapreduce/ python aggregate-collection.py  --runner hadoop --hadoop-bin /usr/bin/hadoop --jobconf mapred.reduce.tasks=20  --file healthreportutils.py  --start-date=2014-03-21 hdfs:///user/sguha/fhr/samples/output/5pct/
+HADOOP_HOME=/opt/cloudera/parcels/CDH/lib/hadoop-0.20-mapreduce python fhr-toolbox/jydoop/aggregate-collection.py --runner hadoop --jobconf mapred.reduce.tasks=20 --file ~/fhr-toolbox/jydoop/healthreportutils.py --start-date=2014-05-12 --hadoop-bin /usr/bin/hadoop hdfs:///user/bcolloran/fhrDeorphaned_2014-05-12
 
 # to test etc:
 # hadoop dfs -text /user/sguha/fhr/samples/output/5pct/part-r-00072 | head -n 10000 | python -m cProfile aggregate-collection.py - > outfile
