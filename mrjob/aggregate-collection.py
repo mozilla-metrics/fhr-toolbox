@@ -43,7 +43,6 @@ main_channels = (
     'release'
 )
 
-date_key = "org.mozilla.fhrtoolbox.snapshotdate"
 def last_saturday(d):
     """Return the Saturday on or before the date."""
     # .weekday in python starts on 0=Monday
@@ -289,8 +288,7 @@ def output(fd, path):
     for k, v in getresults(fd):
         if k == "exception":
             print >>errs, "==ERR=="
-            print >>errs, v[0]
-            print >>errs, v[1]
+            print >>errs, v
             continue
         l = []
         unwrap(l, k)
