@@ -103,9 +103,6 @@ def mapjob(job, key, payload):
 
     # require the v1 plugin data
     plugins = payload.last.get("org.mozilla.addons.plugins", {})
-    plugins_v = plugins.get("_v", "?")
-    if plugins_v != 1:
-        return
 
     os = payload.last.get("org.mozilla.appInfo.appinfo", {}).get("os", "?")
     yield (("totals", channel, os), 1)
