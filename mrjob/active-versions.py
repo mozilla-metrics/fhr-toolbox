@@ -69,6 +69,9 @@ def map(job, key, payload):
             if not last_update and "org.mozilla.appInfo.update" in day:
                 last_update = day
 
+    if not active:
+        return
+
     if not last_update:
         last_update = {}
 
